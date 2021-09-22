@@ -12,9 +12,10 @@ Clone this repo.
 # Usage
 Enable the Python API in iTerm2 -> Preferences... -> General -> Magic  
 Run like:  
-```./cssh --help```  
+```./csshi --help```  
 ```./csshi host user@host host:2222 user@[2100:1234::1000]:2222```  
-``` cat list-of hosts | grep prd | xargs ./cssh```
+``` cat list-of hosts | grep prd | xargs ./csshi```
 
 # Contribute
 Throw a PR over, raise an issue, sliiiide into my DMs.
+Email in the git log.
