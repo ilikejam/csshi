@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+""" Launch multiple ssh sessions in a single iTerm2 window and broadcast keyboard input
+
+Copyright (C) 2021 David Stark
+
+This program is free software; you can redistribute it and/or modify it under the terms of
+the GNU General Public License as published by the Free Software Foundation; version 2 only.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program;
+if not, write to the Free Software Foundation, Inc.,
+51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA. 
+
+Requires:
+  - python3
+  - iTerm2
+  - pip3:
+      - iterm2
+"""
+
+import os
+import sys
+import iterm2
+import AppKit
+from math import floor, ceil, sqrt
+import subprocess
+import argparse
+
+
+def error(message):
+    """Squeak and keel over"""
+    sys.stderr.write("ERROR: " + message + "\n")
+    sys.exit(1)
+
+
+def get_args():
+    """Parse those args!"""
+    parser = argparse.ArgumentParser(
+        description="Run multiple ssh connections concurrently in an iTerm2 terminal."
+    )
+    parser.add_argument(
+        "-l",
+        "--username",
+        dest="username",
+        help="Login username, overridden per-host by specifying 'user@host'",
+    )
+    parser.add_argument(
+        "-p",
+        "--port",
+        dest="port",
+        type=int,
+        help="ssh server port, overridden per-host by specifying 'host:port",
+    )
+    parser.add_argument(
+        "-J", "--jump", dest="jump", help="ProxyJump [user@]host[:port]"
+    )
+    parser.add_argument(
+        "-o", "--options", dest="options", help="Raw ssh options string."
+    )
+    parser.add_argument(
+        "-C", "--columns", dest="columns", type=int, help="Maximum number of columns."
+    )
+    parser.add_argument(
+        "destinations",
+        metavar="destination",
+        nargs="+",
+        help="[user@]host[:port] ssh server destination. Use square brackets around IPv6 IP adresses.",
+    )
+    return parser.parse_args()
+
+
+def args_to_ssh_strings(args):
+    """Create a list of ssh command strings from the user args.
+    ssh destination specs like user@ and :port override the provided args.
+    """
+    ssh_strings = []
+    for host_spec in args.destinations:
+        spec = host_spec
+        ssh_string = ""
+        user = None
+        hostname = None
+        port = None
+        if args.username:
+            user = args.username
+        if args.port:
+            port = args.port
+
+        # Strip down spec until it's just a hostname
+        if "@" in spec:
+            user = spec.split("@")[0]
+            spec = spec.split("@")[1]
+        if "]" in spec:
+            # IPv6 [2100:1111::1111] square bracket syntax
+            hostname = spec.split("]")[0].lstrip("[")
+            spec = spec.split("]")[1]
+        if ":" in spec:
+            port = spec.split(":")[1]
+            spec = spec.split(":")[0]
+        if spec:
+            hostname = spec
+
+        if not hostname:
+            error(f"ssh host '{host_spec}' does not appear to include a hostname.")
+
+        ssh_string = hostname
+        if user:
+            ssh_string = " ".join(["-l", user, ssh_string])
+        if port:
+            ssh_string = " ".join(["-p", str(port), ssh_string])
+        if args.jump:
+            ssh_string = " ".join(["-J", args.jump, ssh_string])
+        if args.options:
+            ssh_string = " ".join([args.options, ssh_string])
+        ssh_string = " ".join(["ssh", ssh_string])
+
+        ssh_strings.append(ssh_string)
+
+    return ssh_strings
+
+
+def get_user_shell():
+    """Find the user's shell, or whichever bash is first in PATH"""
+    if os.environ.get("SHELL"):
+        shell = os.environ.get("SHELL")
+    else:
+        try:
+            pcomplete = subprocess.run(
+                "command -v bash", shell=True, check=True, capture_output=True
+            )
+        except subprocess.CalledProcessError as e:
+            error("Could not find a local shell to run. Set $SHELL or install bash.")
+        shell = str(pcomplete.stdout.decode("utf-8").strip())
+    return shell
+
+
+def args_to_columns(args):
+    """Set a calculated number of columns, or user specified
+    whichever is less
+    """
+    floor_square = floor(sqrt(len(args.destinations)))
+    if args.columns:
+        if args.columns <= floor_square:
+            return args.columns
+    return floor_square
+
+
+def gen_ssh_profile():
+    """iTerm profile for ssh panes
+    The ssh command is set in the main loop with set_command()
+    """
+    profile = iterm2.LocalWriteOnlyProfile()
+    profile.set_use_custom_command("Yes")
+    profile.set_close_sessions_on_end(False)
+    return profile
+
+
+def gen_spacer_profile():
+    """iTerm profile for spacer panes
+    Just spit out a message a wait
+    """
+    profile = iterm2.LocalWriteOnlyProfile()
+    profile.set_use_custom_command("Yes")
+    profile.set_command(f'{shell} -c "/bin/echo PANE NOT IN USE"')
+    profile.set_close_sessions_on_end(False)
+    return profile
+
+
+# Parse input early to avoid noisy connection errors after help and usage output
+args = get_args()
+ssh_strings = args_to_ssh_strings(args)
+shell = get_user_shell()
+
+
+async def main(connection):
+    """The party starts here"""
+    # Fire up iTerm if it's not already running
+    app = AppKit.NSWorkspace.sharedWorkspace().launchApplication_("iTerm")
+    cols = args_to_columns(args)
+    rows = ceil(len(ssh_strings) / cols)
+    ssh_exec_string = f"{shell} -l -c '{{ssh_string}}'"
+    ssh_profile = gen_ssh_profile()
+    spacer_profile = gen_spacer_profile()
+
+    app = await iterm2.async_get_app(connection)
+
+    host_ind = 0
+
+    # Launch the first pane straight into ssh
+    ssh_profile.set_command(ssh_exec_string.format(ssh_string=ssh_strings[host_ind]))
+    myterm = await iterm2.Window.async_create(
+        connection, profile_customizations=ssh_profile
+    )
+
+    tab = myterm.current_tab
+
+    # Launch the rest of the first row into ssh
+    # First row will always be all ssh panes, no spacers
+    column_heads = [tab.current_session]
+    for i in range(cols - 1):
+        host_ind += 1
+        ssh_profile.set_command(
+            ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
+        )
+        column_heads.append(
+            await tab.current_session.async_split_pane(
+                vertical=True, profile_customizations=ssh_profile
+            )
+        )
+
+    # Create the rest of the pane rows, either as ssh or spacer
+    total_sessions = cols
+    active_sessions = column_heads
+    column_tails = column_heads.copy()  # new pane rows are split from the bottom
+    for i in range(rows - 1):
+        for j in range(cols):
+            total_sessions += 1
+            if total_sessions <= len(ssh_strings):
+                # Still launching ssh panes
+                host_ind += 1
+                ssh_profile.set_command(
+                    ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
+                )
+                last = await column_tails[j].async_split_pane(
+                    vertical=False, profile_customizations=ssh_profile
+                )
+                active_sessions.append(last)
+            else:
+                # We've launched all of the ssh panes
+                # Launch spacers to keep the pane sizes consistent
+                last = await column_tails[j].async_split_pane(
+                    vertical=False, profile_customizations=spacer_profile
+                )
+            column_tails[j] = last
+
+    # Attach user input to the ssh panes
+    domain = iterm2.broadcast.BroadcastDomain()
+    for session in active_sessions:
+        domain.add_session(session)
+    bc_domains = app.broadcast_domains
+    bc_domains.append(domain)
+    await iterm2.async_set_broadcast_domains(connection, bc_domains)
+
+    # Tidy up the window
+    await iterm2.MainMenu.async_select_menu_item(
+        connection, "Arrange Split Panes Evenly"
+    )
+    await active_sessions[0].async_activate()
+
+
+# GO!
+iterm2.run_until_complete(main)

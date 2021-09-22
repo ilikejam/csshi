@@ -1,2 +1,20 @@
 # csshi
-cssh for iterm2
+ClusterSSH (cssh) for [iTerm2](https://iterm2.com/).
+
+# Install
+Install the latest iTerm2 however you like.  
+Install python3 e.g. with [homebrew](https://brew.sh/):  
+```brew install python3```  
+Install the python iterm2 libs through pip:  
+```pip3 install iterm2```  
+Clone this repo.
+
+# Usage
+Enable the Python API in iTerm2 -> Preferences... -> General -> Magic  
+Run like:  
+```./cssh --help```  
+```./csshi host user@host host:2222 user@[2100:1234::1000]:2222```  
+``` cat list-of hosts | grep prd | xargs ./cssh```
+
+# Contribute
+Throw a PR over, raise an issue, sliiiide into my DMs.
