@@ -44,12 +44,12 @@ optional arguments:
 
 # Tips
 Some preferences to optimise for shell density if you find yourself opening a lot of terminals in one csshi session:
-1) Use a small font, like the original [misc-fixed 6x13](https://monkey.org/~marius/beautiful-fixed-width-fonts-for-osx.html), and disable antialiasing at:  
+1) Use a small font, like the original [misc-fixed 6x13](https://monkey.org/~marius/beautiful-fixed-width-fonts-for-osx.html), and disable antialiasing:  
 `iTerm2` -> `Preferences...` -> `Profiles` -> `Text` -> `Anti-aliased`
 1) Disable pane menubars:  
 `iTerm2` -> `Preferences...` -> `Appearance` -> `Panes` -> `Show per-pane title bar with split panes`  
 You can still access the menu for each pane with Ctrl-click instead of the menubar burger icon
-1) Decrease the 'Side' and 'Top & bottom' margins at:  
+1) Decrease the 'Side' and 'Top & bottom' margins:  
 `iTerm2` -> `Preferences...` -> `Appearance` -> `Panes`
 
 # Contribute
