@@ -15,6 +15,7 @@ if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA. 
 
 Requires:
+  - ssh
   - python3
   - iTerm2
   - pip3:
@@ -55,10 +56,10 @@ def get_args():
         help="ssh server port, overridden per-host by specifying 'host:port",
     )
     parser.add_argument(
-        "-J", "--jump", dest="jump", help="ProxyJump [user@]host[:port]"
+        "-J", "--jump", dest="jumphost", help="ProxyJump host specification, like [user@]jumphost[:port]"
     )
     parser.add_argument(
-        "-o", "--options", dest="options", help="Raw ssh options string."
+        "-o", "--options", dest="options", help="Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'"
     )
     parser.add_argument(
         "-C", "--columns", dest="columns", type=int, help="Maximum number of columns."
@@ -67,7 +68,7 @@ def get_args():
         "destinations",
         metavar="destination",
         nargs="+",
-        help="[user@]host[:port] ssh server destination. Use square brackets around IPv6 IP adresses.",
+        help="[user@]host[:port] ssh server specification. Use square brackets around IPv6 IP adresses.",
     )
     return parser.parse_args()
 
@@ -110,8 +111,8 @@ def args_to_ssh_strings(args):
             ssh_string = " ".join(["-l", user, ssh_string])
         if port:
             ssh_string = " ".join(["-p", str(port), ssh_string])
-        if args.jump:
-            ssh_string = " ".join(["-J", args.jump, ssh_string])
+        if args.jumphost:
+            ssh_string = " ".join(["-J", args.jumphost, ssh_string])
         if args.options:
             ssh_string = " ".join([args.options, ssh_string])
         ssh_string = " ".join(["ssh", ssh_string])
