@@ -4,12 +4,12 @@ A ClusterSSH utility (like [cssh](https://github.com/duncs/clusterssh)) for [iTe
 The command opens an iTerm2 Window and connects over ssh to each specified host in a [split pane](https://iterm2.com/features.html) session, with any text typed or pasted replicated to all panes through iTerm2's 'broadcast' feature. iTerm2's split pane controls are available as normal, so broadcast input can be toggled per-pane, sessions can be restarted, etc.
 
 # Install
-Install the latest iTerm2 however you like.  
-Install python3 e.g. with [homebrew](https://brew.sh/):  
-```$ brew install python3```  
-Install the python iterm2 libs through pip:  
-```$ pip3 install iterm2```  
-Clone this repo and optionally copy csshi to your PATH.
+* Install the latest iTerm2 however you like.
+* Install python3 e.g. with [homebrew](https://brew.sh/):  
+```$ brew install python3```
+* Install the python iterm2 libs through pip:  
+```$ pip3 install iterm2```
+* Clone this repo and optionally copy csshi to your PATH.
 
 # Usage
 Enable the iTerm2 Python API at:  
@@ -44,12 +44,12 @@ optional arguments:
 
 # Tips
 Some preferences to optimise for shell density if you find yourself opening a lot of terminals in one csshi session:
-1) Use a small font, like the original [misc-fixed 6x13](https://monkey.org/~marius/beautiful-fixed-width-fonts-for-osx.html), and disable antialiasing:  
-`iTerm2` -> `Preferences...` -> `Profiles` -> `Text` -> `Anti-aliased`
-1) Disable pane menubars:  
+* Disable pane menubars:  
 `iTerm2` -> `Preferences...` -> `Appearance` -> `Panes` -> `Show per-pane title bar with split panes`  
 You can still access the menu for each pane with Ctrl-click instead of the menubar burger icon
-1) Decrease the 'Side' and 'Top & bottom' margins:  
+* Use a small font, like the original [misc-fixed 6x13](https://monkey.org/~marius/beautiful-fixed-width-fonts-for-osx.html), and disable antialiasing:  
+`iTerm2` -> `Preferences...` -> `Profiles` -> `Text` -> `Anti-aliased`
+* Decrease the 'Side' and 'Top & bottom' margins:  
 `iTerm2` -> `Preferences...` -> `Appearance` -> `Panes`
 
 # Contribute
