@@ -3,6 +3,8 @@ A ClusterSSH utility (like [cssh](https://github.com/duncs/clusterssh)) for [iTe
 
 The command opens an iTerm2 Window and connects over ssh to each specified host in a [split pane](https://iterm2.com/features.html) session, with any text typed or pasted replicated to all panes through iTerm2's 'broadcast' feature. iTerm2's split pane controls are available as normal, so broadcast input can be toggled per-pane, sessions can be restarted, etc.
 
+![Screenshot](screenshot.png "Screenshot")
+
 # Install
 * Install the latest iTerm2 however you like.
 * Install python3 e.g. with [homebrew](https://brew.sh/):  
