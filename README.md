@@ -18,7 +18,7 @@ Enable the iTerm2 Python API at:
 `iTerm2` -> `Preferences...` -> `General` -> `Magic`  
 
 ```text
-usage: cssh [-h] [-l USERNAME] [-p PORT] [-J JUMPHOST] [-o OPTIONS]
+usage: csshi [-h] [-l USERNAME] [-p PORT] [-J JUMPHOST] [-o OPTIONS]
             [-C COLUMNS]
             destination [destination ...]
 
