@@ -31,14 +31,22 @@ import subprocess
 import argparse
 
 
+debugging = False
+
+
 def error(message):
     """Squeak and keel over"""
     sys.stderr.write("ERROR: " + message + "\n")
     sys.exit(1)
 
+def debug(message):
+    """Tell me more"""
+    if debugging:
+        sys.stderr.write("DEBUG: " + message + "\n")
+
 
 def get_args():
-    """Parse those args!"""
+    """Parse it. Parse it real good."""
     parser = argparse.ArgumentParser(
         description="Run multiple ssh connections concurrently in an iTerm2 terminal."
     )
@@ -54,6 +62,9 @@ def get_args():
         dest="port",
         type=int,
         help="ssh server port, overridden per-host by specifying 'host:port",
+    )
+    parser.add_argument(
+        "-d", "--debug", dest="debug", action='store_true', help="Turn on debugging"
     )
     parser.add_argument(
         "-J", "--jump", dest="jumphost", help="ProxyJump host specification, like [user@]jumphost[:port]"
@@ -85,8 +96,10 @@ def args_to_ssh_strings(args):
         hostname = None
         port = None
         if args.username:
+            debug(f'Setting default user {args.user}')
             user = args.username
         if args.port:
+            debug(f'Setting default port {args.port}')
             port = args.port
 
         # Strip down spec until it's just a hostname
@@ -108,14 +121,19 @@ def args_to_ssh_strings(args):
 
         ssh_string = hostname
         if user:
+            debug(f'User for host {hostname} is {user}')
             ssh_string = " ".join(["-l", user, ssh_string])
         if port:
+            debug(f'Port for host {hostname} is {port}')
             ssh_string = " ".join(["-p", str(port), ssh_string])
         if args.jumphost:
+            debug(f'Setting jumphost for host {hostname} to {args.jumphost}')
             ssh_string = " ".join(["-J", args.jumphost, ssh_string])
         if args.options:
+            debug(f'Setting ssh options for host {hostname} to "{args.options}"')
             ssh_string = " ".join([args.options, ssh_string])
         ssh_string = " ".join(["ssh", ssh_string])
+        debug(f'SSH command for host {hostname} is: {ssh_string}')
 
         ssh_strings.append(ssh_string)
 
@@ -134,6 +152,7 @@ def get_user_shell():
         except subprocess.CalledProcessError as e:
             error("Could not find a local shell to run. Set $SHELL or install bash.")
         shell = str(pcomplete.stdout.decode("utf-8").strip())
+    debug(f'Using shell {shell}')
     return shell
 
 
@@ -144,7 +163,10 @@ def args_to_columns(args):
     floor_square = floor(sqrt(len(args.destinations)))
     if args.columns:
         if args.columns <= floor_square:
+            debug(f'Using columns argument: {args.columns}')
             return args.columns
+        else:
+            debug('Not using columns argument - sqrt is lower')
     return floor_square
 
 
@@ -171,6 +193,8 @@ def gen_spacer_profile():
 
 # Parse input early to avoid noisy connection errors after help and usage output
 args = get_args()
+if args.debug:
+    debugging = True
 ssh_strings = args_to_ssh_strings(args)
 shell = get_user_shell()
 
@@ -178,18 +202,24 @@ shell = get_user_shell()
 async def main(connection):
     """The party starts here"""
     # Fire up iTerm if it's not already running
+    debug("Launching iTerm...")
     app = AppKit.NSWorkspace.sharedWorkspace().launchApplication_("iTerm")
+    debug("iTerm launched")
     cols = args_to_columns(args)
     rows = ceil(len(ssh_strings) / cols)
     ssh_exec_string = f"{shell} -l -c '{{ssh_string}}'"
+    debug(f'Command string is {ssh_exec_string}')
     ssh_profile = gen_ssh_profile()
     spacer_profile = gen_spacer_profile()
 
+    debug('Connecting to iTerm')
     app = await iterm2.async_get_app(connection)
+    debug('Connected')
 
     host_ind = 0
 
     # Launch the first pane straight into ssh
+    debug("Launching 1st pane")
     ssh_profile.set_command(ssh_exec_string.format(ssh_string=ssh_strings[host_ind]))
     myterm = await iterm2.Window.async_create(
         connection, profile_customizations=ssh_profile
@@ -205,6 +235,7 @@ async def main(connection):
         ssh_profile.set_command(
             ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
         )
+        debug("Splitting pane for ssh")
         column_heads.append(
             await tab.current_session.async_split_pane(
                 vertical=True, profile_customizations=ssh_profile
@@ -224,6 +255,7 @@ async def main(connection):
                 ssh_profile.set_command(
                     ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
                 )
+                debug("Splitting pane for ssh")
                 last = await column_tails[j].async_split_pane(
                     vertical=False, profile_customizations=ssh_profile
                 )
@@ -231,6 +263,7 @@ async def main(connection):
             else:
                 # We've launched all of the ssh panes
                 # Launch spacers to keep the pane sizes consistent
+                debug("Splitting pane for spacer")
                 last = await column_tails[j].async_split_pane(
                     vertical=False, profile_customizations=spacer_profile
                 )
@@ -242,14 +275,19 @@ async def main(connection):
         domain.add_session(session)
     bc_domains = app.broadcast_domains
     bc_domains.append(domain)
+    debug('Enabling input broadcast')
     await iterm2.async_set_broadcast_domains(connection, bc_domains)
 
     # Tidy up the window
+    debug("Arranging panes")
     await iterm2.MainMenu.async_select_menu_item(
         connection, "Arrange Split Panes Evenly"
     )
+    debug("Activating 1st pane")
     await active_sessions[0].async_activate()
 
 
 # GO!
+debug("Entering main()")
 iterm2.run_until_complete(main)
+debug("Main has completed. Exiting.")
