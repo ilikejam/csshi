@@ -18,15 +18,15 @@ Enable the iTerm2 Python API at:
 `iTerm2` -> `Preferences...` -> `General` -> `Magic`  
 
 ```text
-usage: csshi [-h] [-l USERNAME] [-p PORT] [-J JUMPHOST] [-o OPTIONS]
-            [-C COLUMNS]
-            destination [destination ...]
+usage: csshi [-h] [-l USERNAME] [-p PORT] [-d] [-J JUMPHOST] [-o OPTIONS]
+             [-C COLUMNS]
+             destination [destination ...]
 
 Run multiple ssh connections concurrently in an iTerm2 terminal.
 
 positional arguments:
-  destination           [user@]host[:port] ssh server specification. Use square
-                        brackets around IPv6 IP adresses.
+  destination           [user@]host[:port] ssh server specification. Use
+                        square brackets around IPv6 IP adresses.
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -35,6 +35,7 @@ optional arguments:
                         'user@host'
   -p PORT, --port PORT  ssh server port, overridden per-host by specifying
                         'host:port
+  -d, --debug           Turn on debugging
   -J JUMPHOST, --jump JUMPHOST
                         ProxyJump host specification, like
                         [user@]jumphost[:port]
