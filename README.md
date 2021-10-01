@@ -11,7 +11,7 @@ The command opens an iTerm2 Window and connects over ssh to each specified host 
 ```$ brew install python3```
 * Install the python iterm2 libs through pip:  
 ```$ pip3 install iterm2```
-* Clone this repo and optionally copy csshi to your PATH.
+* Clone this repo (or just download the 'csshi' file), make the csshi file executable, and maybe copy or link it to somewhere in your $PATH.
 
 # Usage
 Enable the iTerm2 Python API at:  
