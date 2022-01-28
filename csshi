@@ -91,27 +91,16 @@ def args_to_hostnames(args):
     hostnames = []
     for host_spec in args.destinations:
         spec = host_spec
-        ssh_string = ""
-        user = None
         hostname = None
-        port = None
-        if args.username:
-            debug(f'Setting default user {args.user}')
-            user = args.username
-        if args.port:
-            debug(f'Setting default port {args.port}')
-            port = args.port
 
         # Strip down spec until it's just a hostname
         if "@" in spec:
-            user = spec.split("@")[0]
             spec = spec.split("@")[1]
         if "]" in spec:
             # IPv6 [2100:1111::1111] square bracket syntax
             hostname = spec.split("]")[0].lstrip("[")
             spec = spec.split("]")[1]
         if ":" in spec:
-            port = spec.split(":")[1]
             spec = spec.split(":")[0]
         if spec:
             hostname = spec
