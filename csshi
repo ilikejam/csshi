@@ -29,6 +29,7 @@ import AppKit
 from math import floor, ceil, sqrt
 import subprocess
 import argparse
+from iterm2.profile import TitleComponents
 
 
 debugging = False
@@ -82,6 +83,45 @@ def get_args():
         help="[user@]host[:port] ssh server specification. Use square brackets around IPv6 IP adresses.",
     )
     return parser.parse_args()
+
+
+def args_to_hostnames(args):
+    """Create a list of hostnames from the user args.
+    """
+    hostnames = []
+    for host_spec in args.destinations:
+        spec = host_spec
+        ssh_string = ""
+        user = None
+        hostname = None
+        port = None
+        if args.username:
+            debug(f'Setting default user {args.user}')
+            user = args.username
+        if args.port:
+            debug(f'Setting default port {args.port}')
+            port = args.port
+
+        # Strip down spec until it's just a hostname
+        if "@" in spec:
+            user = spec.split("@")[0]
+            spec = spec.split("@")[1]
+        if "]" in spec:
+            # IPv6 [2100:1111::1111] square bracket syntax
+            hostname = spec.split("]")[0].lstrip("[")
+            spec = spec.split("]")[1]
+        if ":" in spec:
+            port = spec.split(":")[1]
+            spec = spec.split(":")[0]
+        if spec:
+            hostname = spec
+
+        if not hostname:
+            error(f"ssh host '{host_spec}' does not appear to include a hostname.")
+
+        hostnames.append(hostname)
+
+    return hostnames
 
 
 def args_to_ssh_strings(args):
@@ -173,8 +213,11 @@ def args_to_columns(args):
 def gen_ssh_profile():
     """iTerm profile for ssh panes
     The ssh command is set in the main loop with set_command()
+    The session title is set in the main loop with set_name()
     """
     profile = iterm2.LocalWriteOnlyProfile()
+    profile.set_title_components([TitleComponents.SESSION_NAME])
+    profile.set_allow_title_setting(False)
     profile.set_use_custom_command("Yes")
     profile.set_close_sessions_on_end(False)
     return profile
@@ -196,6 +239,7 @@ args = get_args()
 if args.debug:
     debugging = True
 ssh_strings = args_to_ssh_strings(args)
+hostnames = args_to_hostnames(args)
 shell = get_user_shell()
 
 
@@ -221,6 +265,7 @@ async def main(connection):
     # Launch the first pane straight into ssh
     debug("Launching 1st pane")
     ssh_profile.set_command(ssh_exec_string.format(ssh_string=ssh_strings[host_ind]))
+    ssh_profile.set_name(hostnames[host_ind])
     myterm = await iterm2.Window.async_create(
         connection, profile_customizations=ssh_profile
     )
@@ -235,6 +280,7 @@ async def main(connection):
         ssh_profile.set_command(
             ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
         )
+        ssh_profile.set_name(hostnames[host_ind])
         debug("Splitting pane for ssh")
         column_heads.append(
             await tab.current_session.async_split_pane(
@@ -255,6 +301,7 @@ async def main(connection):
                 ssh_profile.set_command(
                     ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
                 )
+                ssh_profile.set_name(hostnames[host_ind])
                 debug("Splitting pane for ssh")
                 last = await column_tails[j].async_split_pane(
                     vertical=False, profile_customizations=ssh_profile
