@@ -12,10 +12,10 @@ The command opens an iTerm2 Window and connects over ssh to each specified host 
 * Install the python iterm2 libs through pip:  
 ```$ pip3 install iterm2```
 * Clone this repo (or just download the 'csshi' file), make the csshi file executable, and maybe copy or link it to somewhere in your $PATH.
+* Enable the iTerm2 Python API at:  
+`iTerm2` -> `Preferences...` -> `General` -> `Magic`
 
-# Usage
-Enable the iTerm2 Python API at:  
-`iTerm2` -> `Preferences...` -> `General` -> `Magic`  
+# Usage  
 
 ```text
 usage: csshi [-h] [-l USERNAME] [-p PORT] [-d] [-J JUMPHOST] [-o OPTIONS]
