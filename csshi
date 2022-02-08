@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ Launch multiple ssh sessions in a single iTerm2 window and broadcast keyboard input
 
-Copyright (C) 2021 David Stark
+Copyright (C) 2021, 2022 David Stark
 
 This program is free software; you can redistribute it and/or modify it under the terms of
 the GNU General Public License as published by the Free Software Foundation; version 2 only.
