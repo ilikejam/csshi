@@ -125,7 +125,7 @@ def args_to_ssh_strings(args):
         hostname = None
         port = None
         if args.username:
-            debug(f'Setting default user {args.user}')
+            debug(f'Setting default user {args.username}')
             user = args.username
         if args.port:
             debug(f'Setting default port {args.port}')
