@@ -77,7 +77,7 @@ def get_args():
         "-C", "--columns", dest="columns", type=int, help="Maximum number of columns."
     )
     parser.add_argument(
-        "-k", "--kill-inactive", dest="kill", action='store_true', help="Kill inactive sessions"
+        "-k", "--kill-inactive", dest="kill", action='store_true', help="Don't create spacer panes and kill inactive panes"
     )
     parser.add_argument(
         "destinations",
