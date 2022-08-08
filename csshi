@@ -22,15 +22,15 @@ Requires:
       - iterm2
 """
 
-import os
-import sys
-import iterm2
-import AppKit
-from math import floor, ceil, sqrt
-import subprocess
 import argparse
-from iterm2.profile import TitleComponents
+import os
+import subprocess
+import sys
+from math import ceil, floor, sqrt
 
+import AppKit
+import iterm2
+from iterm2.profile import TitleComponents
 
 debugging = False
 
@@ -39,6 +39,7 @@ def error(message):
     """Squeak and keel over"""
     sys.stderr.write("ERROR: " + message + "\n")
     sys.exit(1)
+
 
 def debug(message):
     """Tell me more"""
@@ -65,19 +66,29 @@ def get_args():
         help="ssh server port, overridden per-host by specifying 'host:port",
     )
     parser.add_argument(
-        "-d", "--debug", dest="debug", action='store_true', help="Turn on debugging"
+        "-d", "--debug", dest="debug", action="store_true", help="Turn on debugging"
     )
     parser.add_argument(
-        "-J", "--jump", dest="jumphost", help="ProxyJump host specification, like [user@]jumphost[:port]"
+        "-J",
+        "--jump",
+        dest="jumphost",
+        help="ProxyJump host specification, like [user@]jumphost[:port]",
     )
     parser.add_argument(
-        "-o", "--options", dest="options", help="Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'"
+        "-o",
+        "--options",
+        dest="options",
+        help="Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'",
     )
     parser.add_argument(
         "-C", "--columns", dest="columns", type=int, help="Maximum number of columns."
     )
     parser.add_argument(
-        "-k", "--kill-inactive", dest="kill", action='store_true', help="Don't create spacer panes and kill inactive panes"
+        "-k",
+        "--kill-inactive",
+        dest="kill",
+        action="store_true",
+        help="Don't create spacer panes and kill inactive panes",
     )
     parser.add_argument(
         "destinations",
@@ -89,8 +100,7 @@ def get_args():
 
 
 def args_to_hostnames(args):
-    """Create a list of hostnames from the user args.
-    """
+    """Create a list of hostnames from the user args."""
     hostnames = []
     for host_spec in args.destinations:
         spec = host_spec
@@ -128,10 +138,10 @@ def args_to_ssh_strings(args):
         hostname = None
         port = None
         if args.username:
-            debug(f'Setting default user {args.username}')
+            debug(f"Setting default user {args.username}")
             user = args.username
         if args.port:
-            debug(f'Setting default port {args.port}')
+            debug(f"Setting default port {args.port}")
             port = args.port
 
         # Strip down spec until it's just a hostname
@@ -153,19 +163,19 @@ def args_to_ssh_strings(args):
 
         ssh_string = hostname
         if user:
-            debug(f'User for host {hostname} is {user}')
+            debug(f"User for host {hostname} is {user}")
             ssh_string = " ".join(["-l", user, ssh_string])
         if port:
-            debug(f'Port for host {hostname} is {port}')
+            debug(f"Port for host {hostname} is {port}")
             ssh_string = " ".join(["-p", str(port), ssh_string])
         if args.jumphost:
-            debug(f'Setting jumphost for host {hostname} to {args.jumphost}')
+            debug(f"Setting jumphost for host {hostname} to {args.jumphost}")
             ssh_string = " ".join(["-J", args.jumphost, ssh_string])
         if args.options:
             debug(f'Setting ssh options for host {hostname} to "{args.options}"')
             ssh_string = " ".join([args.options, ssh_string])
         ssh_string = " ".join(["ssh", ssh_string])
-        debug(f'SSH command for host {hostname} is: {ssh_string}')
+        debug(f"SSH command for host {hostname} is: {ssh_string}")
 
         ssh_strings.append(ssh_string)
 
@@ -184,7 +194,7 @@ def get_user_shell():
         except subprocess.CalledProcessError as e:
             error("Could not find a local shell to run. Set $SHELL or install bash.")
         shell = str(pcomplete.stdout.decode("utf-8").strip())
-    debug(f'Using shell {shell}')
+    debug(f"Using shell {shell}")
     return shell
 
 
@@ -195,10 +205,10 @@ def args_to_columns(args):
     floor_square = floor(sqrt(len(args.destinations)))
     if args.columns:
         if args.columns <= floor_square:
-            debug(f'Using columns argument: {args.columns}')
+            debug(f"Using columns argument: {args.columns}")
             return args.columns
         else:
-            debug('Not using columns argument - sqrt is lower')
+            debug("Not using columns argument - sqrt is lower")
     return floor_square
 
 
@@ -248,13 +258,13 @@ async def main(connection):
     cols = args_to_columns(args)
     rows = ceil(len(ssh_strings) / cols)
     ssh_exec_string = f"{shell} -l -c '{{ssh_string}}'"
-    debug(f'Command string is {ssh_exec_string}')
+    debug(f"Command string is {ssh_exec_string}")
     ssh_profile = gen_ssh_profile()
     spacer_profile = gen_spacer_profile()
 
-    debug('Connecting to iTerm')
+    debug("Connecting to iTerm")
     app = await iterm2.async_get_app(connection)
-    debug('Connected')
+    debug("Connected")
 
     host_ind = 0
 
@@ -319,7 +329,7 @@ async def main(connection):
         domain.add_session(session)
     bc_domains = app.broadcast_domains
     bc_domains.append(domain)
-    debug('Enabling input broadcast')
+    debug("Enabling input broadcast")
     await iterm2.async_set_broadcast_domains(connection, bc_domains)
 
     # Tidy up the window
