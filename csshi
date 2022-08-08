@@ -12,7 +12,7 @@ See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with this program;
 if not, write to the Free Software Foundation, Inc.,
-51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA. 
+51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 Requires:
   - ssh
@@ -75,6 +75,9 @@ def get_args():
     )
     parser.add_argument(
         "-C", "--columns", dest="columns", type=int, help="Maximum number of columns."
+    )
+    parser.add_argument(
+        "-k", "--kill-inactive", dest="kill", action='store_true', help="Kill inactive sessions"
     )
     parser.add_argument(
         "destinations",
@@ -227,6 +230,10 @@ def gen_spacer_profile():
 args = get_args()
 if args.debug:
     debugging = True
+kill_defunct = False
+if args.kill:
+    kill_defunct = True
+
 ssh_strings = args_to_ssh_strings(args)
 hostnames = args_to_hostnames(args)
 shell = get_user_shell()
@@ -280,6 +287,7 @@ async def main(connection):
     # Create the rest of the pane rows, either as ssh or spacer
     total_sessions = cols
     active_sessions = column_heads
+    spacer_sessions = []
     column_tails = column_heads.copy()  # new pane rows are split from the bottom
     for i in range(rows - 1):
         for j in range(cols):
@@ -296,7 +304,7 @@ async def main(connection):
                     vertical=False, profile_customizations=ssh_profile
                 )
                 active_sessions.append(last)
-            else:
+            elif not kill_defunct:
                 # We've launched all of the ssh panes
                 # Launch spacers to keep the pane sizes consistent
                 debug("Splitting pane for spacer")
@@ -321,6 +329,12 @@ async def main(connection):
     )
     debug("Activating 1st pane")
     await active_sessions[0].async_activate()
+
+    if kill_defunct:
+        debug("Setting close_sessions_on_end to True")
+        for session in active_sessions:
+            profile = await session.async_get_profile()
+            await profile.async_set_close_sessions_on_end(True)
 
 
 # GO!
