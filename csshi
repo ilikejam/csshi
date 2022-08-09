@@ -26,6 +26,7 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 from math import ceil, floor, sqrt
 
 import AppKit
@@ -268,83 +269,96 @@ async def main(connection):
 
     host_ind = 0
 
-    # Launch the first pane straight into ssh
-    debug("Launching 1st pane")
-    ssh_profile.set_command(ssh_exec_string.format(ssh_string=ssh_strings[host_ind]))
-    ssh_profile.set_name(hostnames[host_ind])
-    myterm = await iterm2.Window.async_create(
-        connection, profile_customizations=ssh_profile
-    )
+    async with iterm2.SessionTerminationMonitor(connection) as mon:
 
-    tab = myterm.current_tab
-
-    # Launch the rest of the first row into ssh
-    # First row will always be all ssh panes, no spacers
-    column_heads = [tab.current_session]
-    for i in range(cols - 1):
-        host_ind += 1
+        # Launch the first pane straight into ssh
+        debug("Launching 1st pane")
         ssh_profile.set_command(
             ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
         )
         ssh_profile.set_name(hostnames[host_ind])
-        debug("Splitting pane for ssh")
-        column_heads.append(
-            await tab.current_session.async_split_pane(
-                vertical=True, profile_customizations=ssh_profile
-            )
+        myterm = await iterm2.Window.async_create(
+            connection, profile_customizations=ssh_profile
         )
 
-    # Create the rest of the pane rows, either as ssh or spacer
-    total_sessions = cols
-    active_sessions = column_heads
-    spacer_sessions = []
-    column_tails = column_heads.copy()  # new pane rows are split from the bottom
-    for i in range(rows - 1):
-        for j in range(cols):
-            total_sessions += 1
-            if total_sessions <= len(ssh_strings):
-                # Still launching ssh panes
-                host_ind += 1
-                ssh_profile.set_command(
-                    ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
-                )
-                ssh_profile.set_name(hostnames[host_ind])
-                debug("Splitting pane for ssh")
-                last = await column_tails[j].async_split_pane(
-                    vertical=False, profile_customizations=ssh_profile
-                )
-                active_sessions.append(last)
-            elif not kill_defunct:
-                # We've launched all of the ssh panes
-                # Launch spacers to keep the pane sizes consistent
-                debug("Splitting pane for spacer")
-                last = await column_tails[j].async_split_pane(
-                    vertical=False, profile_customizations=spacer_profile
-                )
-            column_tails[j] = last
+        tab = myterm.current_tab
 
-    # Attach user input to the ssh panes
-    domain = iterm2.broadcast.BroadcastDomain()
-    for session in active_sessions:
-        domain.add_session(session)
-    bc_domains = app.broadcast_domains
-    bc_domains.append(domain)
-    debug("Enabling input broadcast")
-    await iterm2.async_set_broadcast_domains(connection, bc_domains)
+        # Launch the rest of the first row into ssh
+        # First row will always be all ssh panes, no spacers
+        column_heads = [tab.current_session]
+        for i in range(cols - 1):
+            host_ind += 1
+            ssh_profile.set_command(
+                ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
+            )
+            ssh_profile.set_name(hostnames[host_ind])
+            debug("Splitting pane for ssh")
+            column_heads.append(
+                await tab.current_session.async_split_pane(
+                    vertical=True, profile_customizations=ssh_profile
+                )
+            )
 
-    # Tidy up the window
-    debug("Arranging panes")
-    await iterm2.MainMenu.async_select_menu_item(
-        connection, "Arrange Split Panes Evenly"
-    )
-    debug("Activating 1st pane")
-    await active_sessions[0].async_activate()
+        # Create the rest of the pane rows, either as ssh or spacer
+        total_sessions = cols
+        active_sessions = column_heads
+        spacer_sessions = []
+        column_tails = column_heads.copy()  # new pane rows are split from the bottom
+        for i in range(rows - 1):
+            for j in range(cols):
+                total_sessions += 1
+                if total_sessions <= len(ssh_strings):
+                    # Still launching ssh panes
+                    host_ind += 1
+                    ssh_profile.set_command(
+                        ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
+                    )
+                    ssh_profile.set_name(hostnames[host_ind])
+                    debug("Splitting pane for ssh")
+                    last = await column_tails[j].async_split_pane(
+                        vertical=False, profile_customizations=ssh_profile
+                    )
+                    active_sessions.append(last)
+                elif not kill_defunct:
+                    # We've launched all of the ssh panes
+                    # Launch spacers to keep the pane sizes consistent
+                    debug("Splitting pane for spacer")
+                    last = await column_tails[j].async_split_pane(
+                        vertical=False, profile_customizations=spacer_profile
+                    )
+                column_tails[j] = last
 
-    if kill_defunct:
-        debug("Setting close_sessions_on_end to True")
+        # Attach user input to the ssh panes
+        domain = iterm2.broadcast.BroadcastDomain()
         for session in active_sessions:
-            profile = await session.async_get_profile()
-            await profile.async_set_close_sessions_on_end(True)
+            domain.add_session(session)
+        bc_domains = app.broadcast_domains
+        bc_domains.append(domain)
+        debug("Enabling input broadcast")
+        await iterm2.async_set_broadcast_domains(connection, bc_domains)
+
+        # Tidy up the window
+        debug("Arranging panes")
+        await iterm2.MainMenu.async_select_menu_item(
+            connection, "Arrange Split Panes Evenly"
+        )
+        debug("Activating 1st pane")
+        await active_sessions[0].async_activate()
+
+        while kill_defunct and active_sessions:
+            debug("Waiting for next session to close...")
+            session_id = await mon.async_get()
+            debug(f"Got termination for {session_id}")
+            session = app.get_session_by_id(session_id)
+            if session:
+                if session in tab.sessions:
+                    debug(f"Closing session {session_id}")
+                    await session.async_close()
+                    active_sessions.remove(session)
+                else:
+                    debug(f"Ignoring session {session_id} - not in our tab")
+            else:
+                debug(f"Session for {session_id} gone")
 
 
 # GO!
