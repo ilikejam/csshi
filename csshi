@@ -351,6 +351,7 @@ async def main(connection):
 
         # Wait for session end if '-k' flag supplied
         while kill_defunct and active_sessions:
+            debug(f"Active sessions: {active_sessions}")
             debug("Waiting for next session to close...")
             session_id = await mon.async_get()
             debug(f"Got termination for {session_id}")
@@ -359,11 +360,14 @@ async def main(connection):
                 if session in tab.sessions:
                     debug(f"Closing session {session_id}")
                     await session.async_close()
-                    active_sessions.remove(session)
                 else:
                     debug(f"Ignoring session {session_id} - not in our tab")
             else:
                 debug(f"Session for {session_id} gone")
+            for s in active_sessions:
+                if s.session_id == session_id:
+                    debug(f"Removing session {session_id} from active list")
+                    active_sessions.remove(s)
 
 
 # GO!
