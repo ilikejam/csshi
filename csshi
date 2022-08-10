@@ -19,7 +19,8 @@ Requires:
   - python3
   - iTerm2
   - pip3:
-      - iterm2
+    - iterm2
+    - pyobjc
 """
 
 import argparse
@@ -129,7 +130,7 @@ def args_to_hostnames(args):
 
 def args_to_ssh_strings(args):
     """Create a list of ssh command strings from the user args.
-    ssh destination specs like user@ and :port override the provided args.
+    ssh destination specs like user@ and :port override the '-' and '-p' args.
     """
     ssh_strings = []
     for host_spec in args.destinations:
@@ -176,7 +177,7 @@ def args_to_ssh_strings(args):
             debug(f'Setting ssh options for host {hostname} to "{args.options}"')
             ssh_string = " ".join([args.options, ssh_string])
         ssh_string = " ".join(["ssh", ssh_string])
-        debug(f"SSH command for host {hostname} is: {ssh_string}")
+        debug(f"ssh_string for host {hostname} is: {ssh_string}")
 
         ssh_strings.append(ssh_string)
 
@@ -244,20 +245,22 @@ if args.debug:
 kill_defunct = False
 if args.kill:
     kill_defunct = True
-
 ssh_strings = args_to_ssh_strings(args)
 hostnames = args_to_hostnames(args)
 shell = get_user_shell()
+cols = args_to_columns(args)
+rows = ceil(len(ssh_strings) / cols)
 
 
 async def main(connection):
-    """The party starts here"""
+    """Do the thing.
+    main() is getting a bit long, but it's all procedural
+    stuff, so just sit back and enjoy the ride.
+    """
     # Fire up iTerm if it's not already running
     debug("Launching iTerm...")
     app = AppKit.NSWorkspace.sharedWorkspace().launchApplication_("iTerm")
     debug("iTerm launched")
-    cols = args_to_columns(args)
-    rows = ceil(len(ssh_strings) / cols)
     ssh_exec_string = f"{shell} -l -c '{{ssh_string}}'"
     debug(f"Command string is {ssh_exec_string}")
     ssh_profile = gen_ssh_profile()
@@ -321,7 +324,8 @@ async def main(connection):
                     active_sessions.append(last)
                 elif not kill_defunct:
                     # We've launched all of the ssh panes
-                    # Launch spacers to keep the pane sizes consistent
+                    # If '-k' flag is _not_ specified, launch spacer panes to
+                    # fill the last row and keep the pane sizes consistent
                     debug("Splitting pane for spacer")
                     last = await column_tails[j].async_split_pane(
                         vertical=False, profile_customizations=spacer_profile
@@ -345,6 +349,7 @@ async def main(connection):
         debug("Activating 1st pane")
         await active_sessions[0].async_activate()
 
+        # Wait for session end if '-k' flag supplied
         while kill_defunct and active_sessions:
             debug("Waiting for next session to close...")
             session_id = await mon.async_get()
