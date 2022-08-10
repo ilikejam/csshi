@@ -43,6 +43,7 @@ optional arguments:
                         Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'
   -C COLUMNS, --columns COLUMNS
                         Maximum number of columns.
+  -k, --kill-inactive   Don't create spacer panes and kill inactive panes
 ```
 
 # Tips
