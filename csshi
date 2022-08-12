@@ -93,6 +93,13 @@ def get_args():
         help="Don't create spacer panes and kill inactive panes",
     )
     parser.add_argument(
+        "-b",
+        "--binary",
+        dest="binary",
+        default="ssh",
+        help="SSH binary to use. Defaults to 'ssh'",
+    )
+    parser.add_argument(
         "destinations",
         metavar="destination",
         nargs="+",
@@ -176,7 +183,7 @@ def args_to_ssh_strings(args):
         if args.options:
             debug(f'Setting ssh options for host {hostname} to "{args.options}"')
             ssh_string = " ".join([args.options, ssh_string])
-        ssh_string = " ".join(["ssh", ssh_string])
+        ssh_string = " ".join([args.binary, ssh_string])
         debug(f"ssh_string for host {hostname} is: {ssh_string}")
 
         ssh_strings.append(ssh_string)
