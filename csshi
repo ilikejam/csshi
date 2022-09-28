@@ -311,7 +311,6 @@ async def main(connection):
 
         # Create the rest of the pane rows, either as ssh or spacer
         total_sessions = cols
-        active_sessions = column_heads
         spacer_sessions = []
         column_tails = column_heads.copy()  # new pane rows are split from the bottom
         for i in range(rows - 1):
@@ -328,7 +327,6 @@ async def main(connection):
                     last = await column_tails[j].async_split_pane(
                         vertical=False, profile_customizations=ssh_profile
                     )
-                    active_sessions.append(last)
                 elif not kill_defunct:
                     # We've launched all of the ssh panes
                     # If '-k' flag is _not_ specified, launch spacer panes to
@@ -341,7 +339,7 @@ async def main(connection):
 
         # Attach user input to the ssh panes
         domain = iterm2.broadcast.BroadcastDomain()
-        for session in active_sessions:
+        for session in tab.sessions:
             domain.add_session(session)
         bc_domains = app.broadcast_domains
         bc_domains.append(domain)
@@ -354,11 +352,11 @@ async def main(connection):
             connection, "Arrange Split Panes Evenly"
         )
         debug("Activating 1st pane")
-        await active_sessions[0].async_activate()
+        await tab.sessions[0].async_activate()
 
         # Wait for session end if '-k' flag supplied
-        while kill_defunct and active_sessions:
-            debug(f"Active sessions: {active_sessions}")
+        while kill_defunct and tab.sessions:
+            debug(f"Active sessions: {tab.sessions}")
             debug("Waiting for next session to close...")
             session_id = await mon.async_get()
             debug(f"Got termination for {session_id}")
@@ -367,14 +365,13 @@ async def main(connection):
                 if session in tab.sessions:
                     debug(f"Closing session {session_id}")
                     await session.async_close()
+                    if tab.sessions == [session]:
+                        debug(f"Session for {session_id} was last session")
+                        return
                 else:
                     debug(f"Ignoring session {session_id} - not in our tab")
             else:
                 debug(f"Session for {session_id} gone")
-            for s in active_sessions:
-                if s.session_id == session_id:
-                    debug(f"Removing session {session_id} from active list")
-                    active_sessions.remove(s)
 
 
 # GO!
