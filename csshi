@@ -181,7 +181,7 @@ def args_to_ssh_strings(args):
             debug(f"Setting jumphost for host {hostname} to {args.jumphost}")
             ssh_string = " ".join(["-J", args.jumphost, ssh_string])
         if args.options:
-            debug(f'Setting ssh options for host {hostname} to "{args.options}"')
+            debug(f'Setting options for host {hostname} to "{args.options}"')
             ssh_string = " ".join([args.options, ssh_string])
         ssh_string = " ".join([args.binary, ssh_string])
         debug(f"ssh_string for host {hostname} is: {ssh_string}")
