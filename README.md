@@ -6,7 +6,14 @@ The command opens an iTerm2 Window and connects over ssh to each specified host 
 ![Screenshot](screenshot.png "Screenshot")
 
 # Install
-* Install the latest iTerm2 however you like.
+
+## Homebrew
+* Install iTerm2 however you like.
+* Install csshi:  
+```$ brew install ilikejam/csshi/csshi```
+
+## Manual
+* Install iTerm2 however you like.
 * Install python3 e.g. with [homebrew](https://brew.sh/):  
 ```$ brew install python3```
 * Install the python iterm2 and pyobjc libs through pip:  
