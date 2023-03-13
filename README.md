@@ -11,6 +11,8 @@ The command opens an iTerm2 Window and connects over ssh to each specified host 
 * Install iTerm2 however you like.
 * Install csshi:  
 ```$ brew install ilikejam/csshi/csshi```
+* Enable the iTerm2 Python API at:  
+`iTerm2` -> `Preferences...` -> `General` -> `Magic`
 
 ## Manual
 * Install iTerm2 however you like.
