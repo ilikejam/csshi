@@ -24,10 +24,10 @@ Requires:
 """
 
 import argparse
+import asyncio
 import os
 import subprocess
 import sys
-import time
 from math import ceil, floor, sqrt
 
 import AppKit
@@ -98,6 +98,14 @@ def get_args():
         dest="binary",
         default="ssh",
         help="SSH binary to use. Defaults to 'ssh'",
+    )
+    parser.add_argument(
+        "-s",
+        "--sleep",
+        dest="sleep",
+        default=0,
+        type=float,
+        help="Sleep time in seconds between hosts. Defaults to 0",
     )
     parser.add_argument(
         "destinations",
@@ -200,7 +208,7 @@ def get_user_shell():
             pcomplete = subprocess.run(
                 "command -v bash", shell=True, check=True, capture_output=True
             )
-        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError:
             error("Could not find a local shell to run. Set $SHELL or install bash.")
         shell = str(pcomplete.stdout.decode("utf-8").strip())
     debug(f"Using shell {shell}")
@@ -216,8 +224,7 @@ def args_to_columns(args):
         if args.columns <= floor_square:
             debug(f"Using columns argument: {args.columns}")
             return args.columns
-        else:
-            debug("Not using columns argument - sqrt is lower")
+        debug("Not using columns argument - sqrt is lower")
     return floor_square
 
 
@@ -257,6 +264,7 @@ hostnames = args_to_hostnames(args)
 shell = get_user_shell()
 cols = args_to_columns(args)
 rows = ceil(len(ssh_strings) / cols)
+sleep = args.sleep
 
 
 async def main(connection):
@@ -280,7 +288,6 @@ async def main(connection):
     host_ind = 0
 
     async with iterm2.SessionTerminationMonitor(connection) as mon:
-
         # Launch the first pane straight into ssh
         debug("Launching 1st pane")
         ssh_profile.set_command(
@@ -296,7 +303,9 @@ async def main(connection):
         # Launch the rest of the first row into ssh
         # First row will always be all ssh panes, no spacers
         column_heads = [tab.current_session]
-        for i in range(cols - 1):
+        for _ in range(cols - 1):
+            debug(f"Sleeping for {sleep} seconds")
+            await asyncio.sleep(sleep)
             host_ind += 1
             ssh_profile.set_command(
                 ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
@@ -311,9 +320,8 @@ async def main(connection):
 
         # Create the rest of the pane rows, either as ssh or spacer
         total_sessions = cols
-        spacer_sessions = []
         column_tails = column_heads.copy()  # new pane rows are split from the bottom
-        for i in range(rows - 1):
+        for _ in range(rows - 1):
             for j in range(cols):
                 total_sessions += 1
                 if total_sessions <= len(ssh_strings):
@@ -323,6 +331,8 @@ async def main(connection):
                         ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
                     )
                     ssh_profile.set_name(hostnames[host_ind])
+                    debug(f"Sleeping for {sleep} seconds")
+                    await asyncio.sleep(sleep)
                     debug("Splitting pane for ssh")
                     last = await column_tails[j].async_split_pane(
                         vertical=False, profile_customizations=ssh_profile

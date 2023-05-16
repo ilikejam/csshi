@@ -28,7 +28,7 @@ The command opens an iTerm2 Window and connects over ssh to each specified host 
 
 ```text
 usage: csshi [-h] [-l USERNAME] [-p PORT] [-d] [-J JUMPHOST] [-o OPTIONS]
-             [-C COLUMNS] [-k] [-b BINARY]
+             [-C COLUMNS] [-k] [-b BINARY] [-s SLEEP]
              destination [destination ...]
 
 Run multiple ssh connections concurrently in an iTerm2 terminal.
@@ -37,7 +37,7 @@ positional arguments:
   destination           [user@]host[:port] ssh server specification. Use
                         square brackets around IPv6 IP adresses.
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   -l USERNAME, --username USERNAME
                         Login username, overridden per-host by specifying
@@ -55,6 +55,8 @@ optional arguments:
   -k, --kill-inactive   Don't create spacer panes and kill inactive panes
   -b BINARY, --binary BINARY
                         SSH binary to use. Defaults to 'ssh'
+  -s SLEEP, --sleep SLEEP
+                        Sleep time in seconds between hosts. Defaults to 0
 ```
 
 # Tips
