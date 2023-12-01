@@ -108,6 +108,13 @@ def get_args():
         help="Sleep time in seconds between hosts. Defaults to 0",
     )
     parser.add_argument(
+        "-n",
+        "--no-broadcast",
+        dest="nobroadcast",
+        action="store_true",
+        help="Don't enable input broadcast",
+    )
+    parser.add_argument(
         "destinations",
         metavar="destination",
         nargs="+",
@@ -265,6 +272,7 @@ shell = get_user_shell()
 cols = args_to_columns(args)
 rows = ceil(len(ssh_strings) / cols)
 sleep = args.sleep
+broadcast = not args.nobroadcast
 
 
 async def main(connection):
@@ -347,14 +355,15 @@ async def main(connection):
                     )
                 column_tails[j] = last
 
-        # Attach user input to the ssh panes
-        domain = iterm2.broadcast.BroadcastDomain()
-        for session in tab.sessions:
-            domain.add_session(session)
-        bc_domains = app.broadcast_domains
-        bc_domains.append(domain)
-        debug("Enabling input broadcast")
-        await iterm2.async_set_broadcast_domains(connection, bc_domains)
+        if broadcast:
+            # Attach user input to the ssh panes
+            domain = iterm2.broadcast.BroadcastDomain()
+            for session in tab.sessions:
+                domain.add_session(session)
+            bc_domains = app.broadcast_domains
+            bc_domains.append(domain)
+            debug("Enabling input broadcast")
+            await iterm2.async_set_broadcast_domains(connection, bc_domains)
 
         # Tidy up the window
         debug("Arranging panes")
