@@ -12,7 +12,7 @@ The command opens an iTerm2 Window and connects over ssh to each specified host 
 * Install csshi:  
 ```$ brew install ilikejam/csshi/csshi```
 * Enable the iTerm2 Python API at:  
-`iTerm2` -> `Preferences...` -> `General` -> `Magic`  
+`iTerm2` -> `Settings...` -> `General` -> `Magic`  
 The 'Require "Automation" permission' option is OK.
 
 ## Manual
@@ -23,7 +23,7 @@ The 'Require "Automation" permission' option is OK.
 ```$ pip3 install iterm2 pyobjc```
 * Clone this repo (or just download the 'csshi' file), make the csshi file executable, and maybe copy or link it to somewhere in your $PATH.
 * Enable the iTerm2 Python API at:  
-`iTerm2` -> `Preferences...` -> `General` -> `Magic`  
+`iTerm2` -> `Settings...` -> `General` -> `Magic`  
 The 'Require "Automation" permission' option is OK.
 
 # Usage  
