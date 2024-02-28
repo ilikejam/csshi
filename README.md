@@ -63,6 +63,9 @@ options:
 ```
 
 # Tips
+If you have a file listing hostnames to connect to, use `xargs`:  
+```$ cat file_of_hosts | xargs csshi```
+
 Some preferences to optimise for shell density if you find yourself opening a lot of terminals in one csshi session:
 * Disable pane menubars:  
 `iTerm2` -> `Preferences...` -> `Appearance` -> `Panes` -> `Show per-pane title bar with split panes`  
