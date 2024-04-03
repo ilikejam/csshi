@@ -75,5 +75,9 @@ You can still access the menu for each pane with Ctrl-click instead of the menub
 * Decrease the 'Side' and 'Top & bottom' margins:  
 `iTerm2` -> `Preferences...` -> `Appearance` -> `Panes`
 
+If you are connecting to large numbers of hosts via a single Jumphost, it's advisable to set up multiplexing for the Jumphost:  
+https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing  
+Also consider raising MaxConnections on that host - the default on OpenSSH is 10.
+
 # Contribute
 Throw a PR over, raise an issue, send me an email.
