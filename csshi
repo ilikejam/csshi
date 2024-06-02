@@ -115,6 +115,13 @@ def get_args():
         help="Don't enable input broadcast",
     )
     parser.add_argument(
+        "-c",
+        "--caffeinate",
+        dest="caffeine",
+        action="store_true",
+        help="Try to keep the Mac awake",
+    )
+    parser.add_argument(
         "destinations",
         metavar="destination",
         nargs="+",
@@ -199,6 +206,8 @@ def args_to_ssh_strings(args):
             debug(f'Setting options for host {hostname} to "{args.options}"')
             ssh_string = " ".join(["-o", args.options, ssh_string])
         ssh_string = " ".join([args.binary, ssh_string])
+        if args.caffeine:
+            ssh_string = " ".join(["caffeinate -dimsu", ssh_string])
         debug(f"ssh_string for host {hostname} is: {ssh_string}")
 
         ssh_strings.append(ssh_string)

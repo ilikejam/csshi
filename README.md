@@ -30,7 +30,7 @@ The 'Require "Automation" permission' option is OK.
 
 ```text
 usage: csshi [-h] [-l USERNAME] [-p PORT] [-d] [-J JUMPHOST] [-o OPTIONS]
-             [-C COLUMNS] [-k] [-b BINARY] [-s SLEEP] [-n]
+             [-C COLUMNS] [-k] [-b BINARY] [-s SLEEP] [-n] [-c]
              destination [destination ...]
 
 Run multiple ssh connections concurrently in an iTerm2 terminal.
@@ -60,6 +60,7 @@ options:
   -s SLEEP, --sleep SLEEP
                         Sleep time in seconds between hosts. Defaults to 0
   -n, --no-broadcast    Don't enable input broadcast
+  -c, --caffeinate      Try to keep the Mac awake
 ```
 
 # Tips
