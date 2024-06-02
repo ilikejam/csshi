@@ -19,9 +19,9 @@ The 'Require "Automation" permission' option is OK.
 * Install iTerm2 however you like.
 * Install python3 e.g. with [homebrew](https://brew.sh/):  
 ```$ brew install python3```
-* Install the python iterm2 and pyobjc libs through pip:  
-```$ pip3 install iterm2 pyobjc```
 * Clone this repo (or just download the 'csshi' file), make the csshi file executable, and maybe copy or link it to somewhere in your $PATH.
+* Install the python iterm2 and pyobjc libs through pip:  
+```$ pip3 install -r requirements.txt```
 * Enable the iTerm2 Python API at:  
 `iTerm2` -> `Settings...` -> `General` -> `Magic`  
 The 'Require "Automation" permission' option is OK.
