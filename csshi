@@ -13,14 +13,6 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with this program;
 if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-
-Requires:
-  - ssh
-  - python3
-  - iTerm2
-  - pip3:
-    - iterm2
-    - pyobjc
 """
 
 import argparse
@@ -29,12 +21,15 @@ import os
 import subprocess
 import sys
 from math import ceil, floor, sqrt
+from os.path import basename
 
-import AppKit
 import iterm2
+from AppKit import NSWorkspace
 from iterm2.profile import TitleComponents
 
-debugging = False
+# We prepend U+2064 INVISIBLE PLUS to session names
+# so we can find sessions we have created later on
+session_name_prefix = "\u2064"
 
 
 def error(message):
@@ -49,10 +44,34 @@ def debug(message):
         sys.stderr.write("DEBUG: " + message + "\n")
 
 
-def get_args():
+def get_arg_parser():
     """Parse it. Parse it real good."""
     parser = argparse.ArgumentParser(
         description="Run multiple ssh connections concurrently in an iTerm2 terminal."
+    )
+    parser.add_argument(
+        "-d", "--debug", dest="debug", action="store_true", help="Turn on debugging"
+    )
+    parser.add_argument(
+        "-k",
+        "--kill-inactive",
+        dest="kill",
+        action="store_true",
+        help="Don't create spacer panes and kill inactive panes",
+    )
+    parser.add_argument(
+        "-c",
+        "--caffeinate",
+        dest="caffeine",
+        action="store_true",
+        help="Try to keep the Mac awake",
+    )
+    parser.add_argument(
+        "-n",
+        "--no-broadcast",
+        dest="nobroadcast",
+        action="store_true",
+        help="Don't enable input broadcast",
     )
     parser.add_argument(
         "-l",
@@ -68,36 +87,10 @@ def get_args():
         help="ssh server port, overridden per-host by specifying 'host:port",
     )
     parser.add_argument(
-        "-d", "--debug", dest="debug", action="store_true", help="Turn on debugging"
-    )
-    parser.add_argument(
         "-J",
         "--jump",
         dest="jumphost",
         help="ProxyJump host specification, like [user@]jumphost[:port]",
-    )
-    parser.add_argument(
-        "-o",
-        "--options",
-        dest="options",
-        help="Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'",
-    )
-    parser.add_argument(
-        "-C", "--columns", dest="columns", type=int, help="Maximum number of columns."
-    )
-    parser.add_argument(
-        "-k",
-        "--kill-inactive",
-        dest="kill",
-        action="store_true",
-        help="Don't create spacer panes and kill inactive panes",
-    )
-    parser.add_argument(
-        "-b",
-        "--binary",
-        dest="binary",
-        default="ssh",
-        help="SSH binary to use. Defaults to 'ssh'",
     )
     parser.add_argument(
         "-s",
@@ -108,26 +101,35 @@ def get_args():
         help="Sleep time in seconds between hosts. Defaults to 0",
     )
     parser.add_argument(
-        "-n",
-        "--no-broadcast",
-        dest="nobroadcast",
-        action="store_true",
-        help="Don't enable input broadcast",
+        "-o",
+        "--options",
+        dest="options",
+        help="Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'",
     )
     parser.add_argument(
-        "-c",
-        "--caffeinate",
-        dest="caffeine",
-        action="store_true",
-        help="Try to keep the Mac awake",
+        "-b",
+        "--binary",
+        dest="binary",
+        default="ssh",
+        help="SSH binary to use. Defaults to 'ssh'",
+    )
+    parser.add_argument(
+        "-C", "--columns", dest="columns", type=int, help="Maximum number of columns."
     )
     parser.add_argument(
         "destinations",
         metavar="destination",
-        nargs="+",
-        help="[user@]host[:port] ssh server specification. Use square brackets around IPv6 IP adresses.",
+        nargs="*",
+        help="[user@]host[:port] ssh server specification. Use square brackets around IPv6 IP adresses",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "-L",
+        "--list-sessions",
+        dest="list_sessions",
+        action="store_true",
+        help="Print space-separated list of csshi sessions, one line per window",
+    )
+    return parser
 
 
 def args_to_hostnames(args):
@@ -268,30 +270,32 @@ def gen_spacer_profile():
     return profile
 
 
-# Parse input early to avoid noisy connection errors after help and usage output
-args = get_args()
-if args.debug:
-    debugging = True
-kill_defunct = False
-if args.kill:
-    kill_defunct = True
-ssh_strings = args_to_ssh_strings(args)
-hostnames = args_to_hostnames(args)
-shell = get_user_shell()
-cols = args_to_columns(args)
-rows = ceil(len(ssh_strings) / cols)
-sleep = args.sleep
-broadcast = not args.nobroadcast
+async def sessions_list(connection):
+    debug("Connecting to iTerm")
+    app = await iterm2.async_get_app(connection)
+    debug("Connected")
+    windows = {}
+    for window in app.windows:
+        windows[window.window_id] = []
+        for tab in window.tabs:
+            for session in tab.sessions:
+                if session.name.startswith(session_name_prefix):
+                    windows[window.window_id].append(
+                        session.name[len(session_name_prefix) :]
+                    )
+    for session_list in windows.values():
+        if session_list:
+            print(" ".join(session_list))
 
 
-async def main(connection):
+async def sessions_run(connection):
     """Do the thing.
-    main() is getting a bit long, but it's all procedural
+    This is getting a bit long, but it's all procedural
     stuff, so just sit back and enjoy the ride.
     """
     # Fire up iTerm if it's not already running
     debug("Launching iTerm...")
-    app = AppKit.NSWorkspace.sharedWorkspace().launchApplication_("iTerm")
+    NSWorkspace.sharedWorkspace().launchApplication_("iTerm")
     debug("iTerm launched")
     ssh_exec_string = f"{shell} -l -c '{{ssh_string}}'"
     debug(f"Command string is {ssh_exec_string}")
@@ -310,7 +314,7 @@ async def main(connection):
         ssh_profile.set_command(
             ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
         )
-        ssh_profile.set_name(hostnames[host_ind])
+        ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
         myterm = await iterm2.Window.async_create(
             connection, profile_customizations=ssh_profile
         )
@@ -327,7 +331,7 @@ async def main(connection):
             ssh_profile.set_command(
                 ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
             )
-            ssh_profile.set_name(hostnames[host_ind])
+            ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
             debug("Splitting pane for ssh")
             column_heads.append(
                 await tab.current_session.async_split_pane(
@@ -347,7 +351,7 @@ async def main(connection):
                     ssh_profile.set_command(
                         ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
                     )
-                    ssh_profile.set_name(hostnames[host_ind])
+                    ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
                     debug(f"Sleeping for {sleep} seconds")
                     await asyncio.sleep(sleep)
                     debug("Splitting pane for ssh")
@@ -402,7 +406,31 @@ async def main(connection):
                 debug(f"Session for {session_id} gone")
 
 
-# GO!
-debug("Entering main()")
-iterm2.run_until_complete(main)
-debug("Main has completed. Exiting.")
+if __name__ == "__main__":
+    parser = get_arg_parser()
+    args = parser.parse_args()
+    debugging = args.debug
+    list_sessions = args.list_sessions
+
+    if list_sessions:
+        debug("Entering sessions_list()")
+        iterm2.run_until_complete(sessions_list)
+        debug("sessions_list() has completed. Exiting.")
+    else:
+        if not args.destinations:
+            parser.print_usage()
+            sys.stderr.write(
+                f"{basename(sys.argv[0])}: error: the following arguments are required: destination\n"
+            )
+            sys.exit(2)
+        ssh_strings = args_to_ssh_strings(args)
+        hostnames = args_to_hostnames(args)
+        shell = get_user_shell()
+        cols = args_to_columns(args)
+        rows = ceil(len(ssh_strings) / cols)
+        kill_defunct = args.kill
+        sleep = args.sleep
+        broadcast = not args.nobroadcast
+        debug("Entering sessions_run()")
+        iterm2.run_until_complete(sessions_run)
+        debug("sessions_run() has completed. Exiting.")

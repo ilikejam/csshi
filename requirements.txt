@@ -1,6 +1,7 @@
 iterm2==2.7
-protobuf==4.25.1
-websockets==10.4
+protobuf==5.27.2
+websockets==12.0
+# pyobjc 9.2 is the last version that doesn't require XCode
 pyobjc==9.2
 pyobjc-core==9.2
 pyobjc-framework-Cocoa==9.2

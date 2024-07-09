@@ -7,6 +7,8 @@ The command opens an iTerm2 Window and connects over ssh to each specified host 
 
 # Install
 
+Installing first time round will take a while - pyobjc is a required package and it compiles a lot of stuff as it installs. Later installs and upgrades will be much faster as the packages will be cached.
+
 ## Homebrew
 * Install iTerm2 however you like.
 * Install csshi:  
@@ -29,38 +31,40 @@ The 'Require "Automation" permission' option is OK.
 # Usage  
 
 ```text
-usage: csshi [-h] [-l USERNAME] [-p PORT] [-d] [-J JUMPHOST] [-o OPTIONS]
-             [-C COLUMNS] [-k] [-b BINARY] [-s SLEEP] [-n] [-c]
-             destination [destination ...]
+usage: csshi [-h] [-d] [-k] [-c] [-n] [-l USERNAME] [-p PORT] [-J JUMPHOST]
+             [-s SLEEP] [-o OPTIONS] [-b BINARY] [-C COLUMNS] [-L]
+             [destination ...]
 
 Run multiple ssh connections concurrently in an iTerm2 terminal.
 
 positional arguments:
   destination           [user@]host[:port] ssh server specification. Use
-                        square brackets around IPv6 IP adresses.
+                        square brackets around IPv6 IP adresses
 
 options:
   -h, --help            show this help message and exit
+  -d, --debug           Turn on debugging
+  -k, --kill-inactive   Don't create spacer panes and kill inactive panes
+  -c, --caffeinate      Try to keep the Mac awake
+  -n, --no-broadcast    Don't enable input broadcast
   -l USERNAME, --username USERNAME
                         Login username, overridden per-host by specifying
                         'user@host'
   -p PORT, --port PORT  ssh server port, overridden per-host by specifying
                         'host:port
-  -d, --debug           Turn on debugging
   -J JUMPHOST, --jump JUMPHOST
                         ProxyJump host specification, like
                         [user@]jumphost[:port]
-  -o OPTIONS, --options OPTIONS
-                        Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'
-  -C COLUMNS, --columns COLUMNS
-                        Maximum number of columns.
-  -k, --kill-inactive   Don't create spacer panes and kill inactive panes
-  -b BINARY, --binary BINARY
-                        SSH binary to use. Defaults to 'ssh'
   -s SLEEP, --sleep SLEEP
                         Sleep time in seconds between hosts. Defaults to 0
-  -n, --no-broadcast    Don't enable input broadcast
-  -c, --caffeinate      Try to keep the Mac awake
+  -o OPTIONS, --options OPTIONS
+                        Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'
+  -b BINARY, --binary BINARY
+                        SSH binary to use. Defaults to 'ssh'
+  -C COLUMNS, --columns COLUMNS
+                        Maximum number of columns.
+  -L, --list-sessions   Print space-separated list of csshi sessions, one line
+                        per window
 ```
 
 # Tips
