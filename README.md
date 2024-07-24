@@ -32,7 +32,7 @@ The 'Require "Automation" permission' option is OK.
 
 ```text
 usage: csshi [-h] [-d] [-k] [-c] [-n] [-l USERNAME] [-p PORT] [-J JUMPHOST]
-             [-s SLEEP] [-o OPTIONS] [-b BINARY] [-C COLUMNS] [-L]
+             [-s SLEEP] [-o OPTIONS] [-b BINARY] [-C COLUMNS | -R ROWS] [-L]
              [destination ...]
 
 Run multiple ssh connections concurrently in an iTerm2 terminal.
@@ -62,7 +62,8 @@ options:
   -b BINARY, --binary BINARY
                         SSH binary to use. Defaults to 'ssh'
   -C COLUMNS, --columns COLUMNS
-                        Maximum number of columns.
+                        Maximum number of columns to use.
+  -R ROWS, --rows ROWS  Maximum number of rows to use.
   -L, --list-sessions   Print space-separated list of csshi sessions, one line
                         per window
 ```

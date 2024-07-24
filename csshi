@@ -113,8 +113,16 @@ def get_arg_parser():
         default="ssh",
         help="SSH binary to use. Defaults to 'ssh'",
     )
-    parser.add_argument(
-        "-C", "--columns", dest="columns", type=int, help="Maximum number of columns."
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "-C",
+        "--columns",
+        dest="columns",
+        type=int,
+        help="Maximum number of columns to use.",
+    )
+    group.add_argument(
+        "-R", "--rows", dest="rows", type=int, help="Maximum number of rows to use."
     )
     parser.add_argument(
         "destinations",
@@ -238,11 +246,21 @@ def args_to_columns(args):
     whichever is less
     """
     floor_square = floor(sqrt(len(args.destinations)))
+    if args.columns is not None and args.columns < 1:
+        error("Columns cannot be < 1")
+    if args.rows is not None and args.rows < 1:
+        error("Rows cannot be < 1")
     if args.columns:
         if args.columns <= floor_square:
             debug(f"Using columns argument: {args.columns}")
             return args.columns
         debug("Not using columns argument - sqrt is lower")
+    if args.rows:
+        columns = ceil(len(args.destinations) / args.rows)
+        debug(
+            f"Using {columns} columns from {len(args.destinations)} destinations, {args.rows} rows"
+        )
+        return columns
     return floor_square
 
 
@@ -410,9 +428,8 @@ if __name__ == "__main__":
     parser = get_arg_parser()
     args = parser.parse_args()
     debugging = args.debug
-    list_sessions = args.list_sessions
 
-    if list_sessions:
+    if args.list_sessions:
         debug("Entering sessions_list()")
         iterm2.run_until_complete(sessions_list)
         debug("sessions_list() has completed. Exiting.")
