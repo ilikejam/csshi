@@ -46,8 +46,12 @@ def debug(message):
 
 def get_arg_parser():
     """Parse it. Parse it real good."""
-    parser = argparse.ArgumentParser(description="Run multiple ssh connections concurrently in an iTerm2 terminal.")
-    parser.add_argument("-d", "--debug", dest="debug", action="store_true", help="Turn on debugging")
+    parser = argparse.ArgumentParser(
+        description="Run multiple ssh connections concurrently in an iTerm2 terminal."
+    )
+    parser.add_argument(
+        "-d", "--debug", dest="debug", action="store_true", help="Turn on debugging"
+    )
     parser.add_argument(
         "-k",
         "--kill-inactive",
@@ -118,7 +122,9 @@ def get_arg_parser():
         type=int,
         help="Maximum number of columns to use.",
     )
-    group.add_argument("-R", "--rows", dest="rows", type=int, help="Maximum number of rows to use.")
+    group.add_argument(
+        "-R", "--rows", dest="rows", type=int, help="Maximum number of rows to use."
+    )
     parser.add_argument(
         "destinations",
         metavar="destination",
@@ -227,7 +233,9 @@ def get_user_shell():
         shell = os.environ.get("SHELL")
     else:
         try:
-            pcomplete = subprocess.run("command -v bash", shell=True, check=True, capture_output=True)
+            pcomplete = subprocess.run(
+                "command -v bash", shell=True, check=True, capture_output=True
+            )
         except subprocess.CalledProcessError:
             error("Could not find a local shell to run. Set $SHELL or install bash.")
         shell = str(pcomplete.stdout.decode("utf-8").strip())
@@ -251,7 +259,9 @@ def args_to_columns(args):
         debug("Not using columns argument - sqrt is lower")
     if args.rows:
         columns = ceil(len(args.destinations) / args.rows)
-        debug(f"Using {columns} columns from {len(args.destinations)} destinations, {args.rows} rows")
+        debug(
+            f"Using {columns} columns from {len(args.destinations)} destinations, {args.rows} rows"
+        )
         return columns
     return floor_square
 
@@ -290,7 +300,9 @@ async def sessions_list(connection):
         for tab in window.tabs:
             for session in tab.sessions:
                 if session.name.startswith(session_name_prefix):
-                    windows[window.window_id].append(session.name[len(session_name_prefix) :])
+                    windows[window.window_id].append(
+                        session.name[len(session_name_prefix) :]
+                    )
     for session_list in windows.values():
         if session_list:
             print(" ".join(session_list))
@@ -319,9 +331,13 @@ async def sessions_run(connection):
     async with iterm2.SessionTerminationMonitor(connection) as mon:
         # Launch the first pane straight into ssh
         debug("Launching 1st pane")
-        ssh_profile.set_command(ssh_exec_string.format(ssh_string=ssh_strings[host_ind]))
+        ssh_profile.set_command(
+            ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
+        )
         ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
-        myterm = await iterm2.Window.async_create(connection, profile_customizations=ssh_profile)
+        myterm = await iterm2.Window.async_create(
+            connection, profile_customizations=ssh_profile
+        )
 
         tab = myterm.current_tab
 
@@ -332,10 +348,16 @@ async def sessions_run(connection):
             debug(f"Sleeping for {sleep} seconds")
             await asyncio.sleep(sleep)
             host_ind += 1
-            ssh_profile.set_command(ssh_exec_string.format(ssh_string=ssh_strings[host_ind]))
+            ssh_profile.set_command(
+                ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
+            )
             ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
             debug("Splitting pane for ssh")
-            column_heads.append(await tab.current_session.async_split_pane(vertical=True, profile_customizations=ssh_profile))
+            column_heads.append(
+                await tab.current_session.async_split_pane(
+                    vertical=True, profile_customizations=ssh_profile
+                )
+            )
 
         # Create the rest of the pane rows, either as ssh or spacer
         total_sessions = cols
@@ -346,18 +368,24 @@ async def sessions_run(connection):
                 if total_sessions <= len(ssh_strings):
                     # Still launching ssh panes
                     host_ind += 1
-                    ssh_profile.set_command(ssh_exec_string.format(ssh_string=ssh_strings[host_ind]))
+                    ssh_profile.set_command(
+                        ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
+                    )
                     ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
                     debug(f"Sleeping for {sleep} seconds")
                     await asyncio.sleep(sleep)
                     debug("Splitting pane for ssh")
-                    last = await column_tails[j].async_split_pane(vertical=False, profile_customizations=ssh_profile)
+                    last = await column_tails[j].async_split_pane(
+                        vertical=False, profile_customizations=ssh_profile
+                    )
                 elif not kill_defunct:
                     # We've launched all of the ssh panes
                     # If '-k' flag is _not_ specified, launch spacer panes to
                     # fill the last row and keep the pane sizes consistent
                     debug("Splitting pane for spacer")
-                    last = await column_tails[j].async_split_pane(vertical=False, profile_customizations=spacer_profile)
+                    last = await column_tails[j].async_split_pane(
+                        vertical=False, profile_customizations=spacer_profile
+                    )
                 column_tails[j] = last
 
         if broadcast:
@@ -372,7 +400,9 @@ async def sessions_run(connection):
 
         # Tidy up the window
         debug("Arranging panes")
-        await iterm2.MainMenu.async_select_menu_item(connection, "Arrange Split Panes Evenly")
+        await iterm2.MainMenu.async_select_menu_item(
+            connection, "Arrange Split Panes Evenly"
+        )
         debug("Activating 1st pane")
         await tab.sessions[0].async_activate()
 
@@ -408,7 +438,9 @@ if __name__ == "__main__":
     else:
         if not args.destinations:
             parser.print_usage()
-            sys.stderr.write(f"{basename(sys.argv[0])}: error: the following arguments are required: destination\n")
+            sys.stderr.write(
+                f"{basename(sys.argv[0])}: error: the following arguments are required: destination\n"
+            )
             sys.exit(2)
         ssh_strings = args_to_ssh_strings(args)
         hostnames = args_to_hostnames(args)
