@@ -170,7 +170,7 @@ def args_to_hostnames(args):
 
 def args_to_ssh_strings(args):
     """Create a list of ssh command strings from the user args.
-    ssh destination specs like user@ and :port override the '-' and '-p' args.
+    ssh destination specs like user@ and :port override the '-l' and '-p' args.
     """
     ssh_strings = []
     for host_spec in args.destinations:
@@ -214,14 +214,16 @@ def args_to_ssh_strings(args):
             debug(f"Setting jumphost for host {hostname} to {args.jumphost}")
             ssh_string = " ".join(["-J", args.jumphost, ssh_string])
         if args.options:
-            debug(f'Setting options for host {hostname} to "{args.options}"')
             for option_count in range(len(args.options)):
+                debug(
+                    f'Setting option for host {hostname}: "{args.options[option_count]}"'
+                )
                 ssh_string = " ".join(["-o", args.options[option_count], ssh_string])
         ssh_string = " ".join([args.binary, ssh_string])
         if args.caffeine:
             ssh_string = " ".join(["caffeinate -dimsu", ssh_string])
-        debug(f"ssh_string for host {hostname} is: {ssh_string}")
 
+        debug(f"ssh_string for host {hostname} is: {ssh_string}")
         ssh_strings.append(ssh_string)
 
     return ssh_strings
