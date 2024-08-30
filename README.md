@@ -58,7 +58,8 @@ options:
   -s SLEEP, --sleep SLEEP
                         Sleep time in seconds between hosts. Defaults to 0
   -o OPTIONS, --options OPTIONS
-                        Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'
+                        Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'.
+                        Can be specified multiple times.
   -b BINARY, --binary BINARY
                         SSH binary to use. Defaults to 'ssh'
   -C COLUMNS, --columns COLUMNS

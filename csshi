@@ -105,7 +105,7 @@ def get_arg_parser():
         "--options",
         action="append",
         dest="options",
-        help="Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'",
+        help="Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'. Can be specified multiple times.",
     )
     parser.add_argument(
         "-b",
