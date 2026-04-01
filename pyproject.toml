@@ -8,4 +8,4 @@ dependencies = [
   "pyobjc-core==12.1",
   "pyobjc-framework-Cocoa==12.1",
 ]
-version = 'v1.11'
+version = 'v1.12'
