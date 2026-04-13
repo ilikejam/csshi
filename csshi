@@ -320,7 +320,7 @@ async def sessions_run(connection: iterm2.Connection) -> None:
     debug("Launching iTerm...")
     NSWorkspace.sharedWorkspace().launchApplication_("iTerm")
     debug("iTerm launched")
-    ssh_exec_string = f"{shell} -l -c '{{ssh_string}}'"
+    ssh_exec_string = f"{shell} -c '{{ssh_string}}'"
     debug(f"Command string is {ssh_exec_string}")
     ssh_profile = gen_ssh_profile()
     spacer_profile = gen_spacer_profile()
