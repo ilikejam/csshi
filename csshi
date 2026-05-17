@@ -21,12 +21,16 @@ import os
 import subprocess
 import sys
 from math import ceil, floor, sqrt
-from os.path import basename
+from subprocess import CompletedProcess
 from typing import NoReturn, Optional
 
 import iterm2
 from AppKit import NSWorkspace
+from iterm2.app import App
+from iterm2.connection import Connection
 from iterm2.profile import TitleComponents
+from iterm2.session import Session
+from iterm2.tab import Tab
 
 # We prepend U+2064 INVISIBLE PLUS to session names
 # so we can find sessions we have created later on
@@ -144,11 +148,10 @@ def get_arg_parser() -> argparse.ArgumentParser:
 
 def args_to_hostnames(args: argparse.Namespace) -> list[str]:
     """Create a list of hostnames from the user args."""
-    hostnames = []
+    hostnames: list[str] = []
     for host_spec in args.destinations:
         spec = host_spec
         hostname = None
-
         # Strip down spec until it's just a hostname
         if "@" in spec:
             spec = spec.split("@")[1]
@@ -160,12 +163,9 @@ def args_to_hostnames(args: argparse.Namespace) -> list[str]:
             spec = spec.split(":")[0]
         if spec:
             hostname = spec
-
         if not hostname:
             error(f"ssh host '{host_spec}' does not appear to include a hostname.")
-
         hostnames.append(hostname)
-
     return hostnames
 
 
@@ -173,7 +173,7 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
     """Create a list of ssh command strings from the user args.
     ssh destination specs like user@ and :port override the '-l' and '-p' args.
     """
-    ssh_strings = []
+    ssh_strings: list[str] = []
     for host_spec in args.destinations:
         spec = host_spec
         ssh_string = ""
@@ -232,11 +232,10 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
 
 def get_user_shell() -> Optional[str]:
     """Find the user's shell, or whichever bash is first in PATH"""
-    if os.environ.get("SHELL"):
-        shell = os.environ.get("SHELL")
-    else:
+    shell: str | None = os.environ.get("SHELL")
+    if not shell:
         try:
-            pcomplete = subprocess.run(
+            pcomplete: CompletedProcess = subprocess.run(
                 "command -v bash", shell=True, check=True, capture_output=True
             )
         except subprocess.CalledProcessError:
@@ -250,7 +249,7 @@ def args_to_columns(args: argparse.Namespace) -> int:
     """Set a calculated number of columns, or user specified
     whichever is less
     """
-    floor_square = floor(sqrt(len(args.destinations)))
+    floor_square: int = floor(sqrt(len(args.destinations)))
     if args.columns is not None and args.columns < 1:
         error("Columns cannot be < 1")
     if args.rows is not None and args.rows < 1:
@@ -294,10 +293,11 @@ def gen_spacer_profile() -> iterm2.LocalWriteOnlyProfile:
 
 
 async def sessions_list(connection: iterm2.Connection) -> None:
+    # Print out sessions started by csshi
     debug("Connecting to iTerm")
     app = await iterm2.async_get_app(connection)
     debug("Connected")
-    windows = {}  # type: dict[str, list[iterm2.session.Session]]
+    windows: dict[str, list[Session]] = {}
     for window in app.windows:
         windows[window.window_id] = []
         for tab in window.tabs:
@@ -309,6 +309,40 @@ async def sessions_list(connection: iterm2.Connection) -> None:
     for session_list in windows.values():
         if session_list:
             print(" ".join(session_list))
+
+
+async def set_broadcast(app: App, connection: Connection, tab: Tab) -> None:
+    # Attach user input to the ssh panes
+    domain = iterm2.broadcast.BroadcastDomain()
+    for session in tab.sessions:
+        domain.add_session(session)
+    bc_domains = app.broadcast_domains
+    bc_domains.append(domain)
+    debug("Enabling input broadcast")
+    await iterm2.async_set_broadcast_domains(connection, bc_domains)
+    return None
+
+
+async def reap_dead_sessions(app: App, connection: Connection, tab: Tab) -> None:
+    # Wait for termination messages, and close any terminated sessions
+    async with iterm2.SessionTerminationMonitor(connection) as mon:
+        while tab.sessions:
+            debug(f"Active sessions: {tab.sessions}")
+            debug("Waiting for next session to close...")
+            session_id = await mon.async_get()
+            debug(f"Got termination for {session_id}")
+            session = app.get_session_by_id(session_id)
+            if session:
+                if session in tab.sessions:
+                    debug(f"Closing session {session_id}")
+                    await session.async_close()
+                    if tab.sessions == [session]:
+                        debug(f"Session for {session_id} was last session")
+                        return
+                else:
+                    debug(f"Ignoring session {session_id} - not in our tab")
+            else:
+                debug(f"Session for {session_id} gone")
 
 
 async def sessions_run(connection: iterm2.Connection) -> None:
@@ -331,102 +365,76 @@ async def sessions_run(connection: iterm2.Connection) -> None:
 
     host_ind = 0
 
-    async with iterm2.SessionTerminationMonitor(connection) as mon:
-        # Launch the first pane straight into ssh
-        debug("Launching 1st pane")
+    # Launch the first pane straight into ssh
+    debug("Launching 1st pane")
+    ssh_profile.set_command(ssh_exec_string.format(ssh_string=ssh_strings[host_ind]))
+    ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
+    myterm = await iterm2.Window.async_create(
+        connection, profile_customizations=ssh_profile
+    )
+
+    tab = myterm.current_tab
+
+    # Launch the rest of the first row into ssh
+    # First row will always be all ssh panes, no spacers
+    column_heads: list[Session] = [tab.current_session]
+    for _ in range(cols - 1):
+        debug(f"Sleeping for {sleep} seconds")
+        await asyncio.sleep(sleep)
+        host_ind += 1
         ssh_profile.set_command(
             ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
         )
         ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
-        myterm = await iterm2.Window.async_create(
-            connection, profile_customizations=ssh_profile
+        debug("Splitting pane for ssh")
+        column_heads.append(
+            await tab.current_session.async_split_pane(
+                vertical=True, profile_customizations=ssh_profile
+            )
         )
 
-        tab = myterm.current_tab
-
-        # Launch the rest of the first row into ssh
-        # First row will always be all ssh panes, no spacers
-        column_heads = [tab.current_session]
-        for _ in range(cols - 1):
-            debug(f"Sleeping for {sleep} seconds")
-            await asyncio.sleep(sleep)
-            host_ind += 1
-            ssh_profile.set_command(
-                ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
-            )
-            ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
-            debug("Splitting pane for ssh")
-            column_heads.append(
-                await tab.current_session.async_split_pane(
-                    vertical=True, profile_customizations=ssh_profile
+    # Create the rest of the pane rows, either as ssh or spacer
+    total_sessions = cols
+    column_tails = column_heads.copy()  # new pane rows are split from the bottom
+    for _ in range(rows - 1):
+        for j in range(cols):
+            total_sessions += 1
+            if total_sessions <= len(ssh_strings):
+                # Still launching ssh panes
+                host_ind += 1
+                ssh_profile.set_command(
+                    ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
                 )
-            )
+                ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
+                debug(f"Sleeping for {sleep} seconds")
+                await asyncio.sleep(sleep)
+                debug("Splitting pane for ssh")
+                last = await column_tails[j].async_split_pane(
+                    vertical=False, profile_customizations=ssh_profile
+                )
+            elif not kill_defunct:
+                # We've launched all of the ssh panes
+                # If '-k' flag is _not_ specified, launch spacer panes to
+                # fill the last row and keep the pane sizes consistent
+                debug("Splitting pane for spacer")
+                last = await column_tails[j].async_split_pane(
+                    vertical=False, profile_customizations=spacer_profile
+                )
+            column_tails[j] = last
 
-        # Create the rest of the pane rows, either as ssh or spacer
-        total_sessions = cols
-        column_tails = column_heads.copy()  # new pane rows are split from the bottom
-        for _ in range(rows - 1):
-            for j in range(cols):
-                total_sessions += 1
-                if total_sessions <= len(ssh_strings):
-                    # Still launching ssh panes
-                    host_ind += 1
-                    ssh_profile.set_command(
-                        ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
-                    )
-                    ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
-                    debug(f"Sleeping for {sleep} seconds")
-                    await asyncio.sleep(sleep)
-                    debug("Splitting pane for ssh")
-                    last = await column_tails[j].async_split_pane(
-                        vertical=False, profile_customizations=ssh_profile
-                    )
-                elif not kill_defunct:
-                    # We've launched all of the ssh panes
-                    # If '-k' flag is _not_ specified, launch spacer panes to
-                    # fill the last row and keep the pane sizes consistent
-                    debug("Splitting pane for spacer")
-                    last = await column_tails[j].async_split_pane(
-                        vertical=False, profile_customizations=spacer_profile
-                    )
-                column_tails[j] = last
+    if broadcast:
+        await set_broadcast(app, connection, tab)
 
-        if broadcast:
-            # Attach user input to the ssh panes
-            domain = iterm2.broadcast.BroadcastDomain()
-            for session in tab.sessions:
-                domain.add_session(session)
-            bc_domains = app.broadcast_domains
-            bc_domains.append(domain)
-            debug("Enabling input broadcast")
-            await iterm2.async_set_broadcast_domains(connection, bc_domains)
+    # Tidy up the window
+    debug("Arranging panes")
+    await iterm2.MainMenu.async_select_menu_item(
+        connection, "Arrange Split Panes Evenly"
+    )
+    debug("Activating 1st pane")
+    await tab.sessions[0].async_activate()
 
-        # Tidy up the window
-        debug("Arranging panes")
-        await iterm2.MainMenu.async_select_menu_item(
-            connection, "Arrange Split Panes Evenly"
-        )
-        debug("Activating 1st pane")
-        await tab.sessions[0].async_activate()
-
-        # Wait for session end if '-k' flag supplied
-        while kill_defunct and tab.sessions:
-            debug(f"Active sessions: {tab.sessions}")
-            debug("Waiting for next session to close...")
-            session_id = await mon.async_get()
-            debug(f"Got termination for {session_id}")
-            session = app.get_session_by_id(session_id)
-            if session:
-                if session in tab.sessions:
-                    debug(f"Closing session {session_id}")
-                    await session.async_close()
-                    if tab.sessions == [session]:
-                        debug(f"Session for {session_id} was last session")
-                        return
-                else:
-                    debug(f"Ignoring session {session_id} - not in our tab")
-            else:
-                debug(f"Session for {session_id} gone")
+    if kill_defunct:
+        await reap_dead_sessions(app, connection, tab)
 
 
 if __name__ == "__main__":
@@ -438,21 +446,20 @@ if __name__ == "__main__":
         debug("Entering sessions_list()")
         iterm2.run_until_complete(sessions_list)
         debug("sessions_list() has completed. Exiting.")
-    else:
-        if not args.destinations:
-            parser.print_usage()
-            sys.stderr.write(
-                f"{basename(sys.argv[0])}: error: the following arguments are required: destination\n"
-            )
-            sys.exit(2)
-        ssh_strings = args_to_ssh_strings(args)
-        hostnames = args_to_hostnames(args)
-        shell = get_user_shell()
-        cols = args_to_columns(args)
-        rows = ceil(len(ssh_strings) / cols)
-        kill_defunct = args.kill
-        sleep = args.sleep
-        broadcast = not args.nobroadcast
-        debug("Entering sessions_run()")
-        iterm2.run_until_complete(sessions_run)
-        debug("sessions_run() has completed. Exiting.")
+        sys.exit(0)
+
+    if not args.destinations:
+        parser.print_usage()
+        error("The following arguments are required: destination")
+
+    ssh_strings = args_to_ssh_strings(args)
+    hostnames = args_to_hostnames(args)
+    shell = get_user_shell()
+    cols = args_to_columns(args)
+    rows = ceil(len(ssh_strings) / cols)
+    kill_defunct = args.kill
+    sleep = args.sleep
+    broadcast = not args.nobroadcast
+    debug("Entering sessions_run()")
+    iterm2.run_until_complete(sessions_run)
+    debug("sessions_run() has completed. Exiting.")
