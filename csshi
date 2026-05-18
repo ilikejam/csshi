@@ -292,7 +292,7 @@ def gen_spacer_profile() -> iterm2.LocalWriteOnlyProfile:
     return profile
 
 
-async def sessions_list(connection: iterm2.Connection) -> None:
+async def sessions_list(connection: Connection) -> None:
     # Print out sessions started by csshi
     debug("Connecting to iTerm")
     app = await iterm2.async_get_app(connection)
@@ -345,7 +345,7 @@ async def reap_dead_sessions(app: App, connection: Connection, tab: Tab) -> None
                 debug(f"Session for {session_id} gone")
 
 
-async def sessions_run(connection: iterm2.Connection) -> None:
+async def sessions_run(connection: Connection) -> None:
     """Do the thing.
     This is getting a bit long, but it's all procedural
     stuff, so just sit back and enjoy the ride.
