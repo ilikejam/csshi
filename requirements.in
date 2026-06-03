@@ -1,6 +1,5 @@
 iterm2==2.14
 protobuf==7.34.0
 websockets==16.0
-pyobjc==12.1
 pyobjc-core==12.1
 pyobjc-framework-Cocoa==12.1
