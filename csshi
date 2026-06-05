@@ -370,10 +370,6 @@ async def sessions_run(config: Config, connection: Connection) -> None:
     This is getting a bit long, but it's all procedural
     stuff, so just sit back and enjoy the ride.
     """
-    # Fire up iTerm if it's not already running
-    logger.debug("Launching iTerm...")
-    NSWorkspace.sharedWorkspace().launchApplication_("iTerm")
-    logger.debug("iTerm launched")
     ssh_exec_string = f"{config.shell} -c '{{ssh_string}}'"
     logger.debug(f"Command string is {ssh_exec_string}")
     ssh_profile = gen_ssh_profile()
@@ -383,7 +379,7 @@ async def sessions_run(config: Config, connection: Connection) -> None:
     logger.debug("Connected")
     host_ind = 0
     # Launch the first pane straight into ssh
-    logger.debug(f"Launching 1st pane, ssh string: {config.ssh_strings[host_ind]}")
+    logger.debug(f"Launching 1st pane, ssh_exec_string: {config.ssh_strings[host_ind]}")
     ssh_profile.set_command(
         ssh_exec_string.format(ssh_string=config.ssh_strings[host_ind])
     )
@@ -403,7 +399,7 @@ async def sessions_run(config: Config, connection: Connection) -> None:
             ssh_exec_string.format(ssh_string=config.ssh_strings[host_ind])
         )
         ssh_profile.set_name(f"{session_name_prefix}{config.hostnames[host_ind]}")
-        logger.debug(f"Splitting pane, ssh string: {config.ssh_strings[host_ind]}")
+        logger.debug(f"Splitting pane, ssh_exec_string: {config.ssh_strings[host_ind]}")
         column_heads.append(
             await tab.current_session.async_split_pane(
                 vertical=True, profile_customizations=ssh_profile
@@ -427,7 +423,7 @@ async def sessions_run(config: Config, connection: Connection) -> None:
                 logger.debug(f"Sleeping for {config.sleep} seconds")
                 await asyncio.sleep(config.sleep)
                 logger.debug(
-                    f"Splitting pane, ssh string: {config.ssh_strings[host_ind]}"
+                    f"Splitting pane, ssh_exec_string: {config.ssh_strings[host_ind]}"
                 )
                 last = await column_tails[j].async_split_pane(
                     vertical=False, profile_customizations=ssh_profile
@@ -472,6 +468,11 @@ if __name__ == "__main__":
         error("The following arguments are required: destination")
     config: Config = build_config(args)
     sessions_run_partial = partial(sessions_run, config)
+    logger.debug("Launching iTerm...")
+    workspace = NSWorkspace.sharedWorkspace()
+    workspace.launchAppWithBundleIdentifier_options_additionalEventParamDescriptor_launchIdentifier_(
+        "com.googlecode.iterm2", 0, None, None
+    )
     logger.debug("Entering sessions_run()")
     iterm2.run_until_complete(sessions_run_partial)
     logger.debug("sessions_run() has completed. Exiting.")

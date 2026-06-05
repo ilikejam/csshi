@@ -29,7 +29,6 @@ The 'Require "Automation" permission' option is OK.
 The 'Require "Automation" permission' option is OK.
 
 # Usage  
-
 ```text
 usage: csshi [-h] [-d] [-k] [-c] [-n] [-l USERNAME] [-p PORT] [-J JUMPHOST]
              [-s SLEEP] [-o OPTIONS] [-b BINARY] [-C COLUMNS | -R ROWS] [-L]
