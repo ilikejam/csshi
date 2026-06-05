@@ -21,9 +21,11 @@ import logging
 import os
 import subprocess
 import sys
+from dataclasses import dataclass, field
+from functools import partial
 from math import ceil, floor, sqrt
 from subprocess import CompletedProcess
-from typing import NoReturn, Optional
+from typing import NoReturn
 
 import iterm2
 from AppKit import NSWorkspace
@@ -34,10 +36,21 @@ from iterm2.session import Session
 from iterm2.tab import Tab
 
 logger: logging.Logger = logging.getLogger(__name__)
-
 # We prepend U+2064 INVISIBLE PLUS to session names
 # so we can find sessions we have created later on
 session_name_prefix = "\u2064"
+
+
+@dataclass
+class Config:
+    ssh_strings: list[str] = field(default_factory=list)
+    hostnames: list[str] = field(default_factory=list)
+    shell: str = ""
+    cols: int = 0
+    rows: int = 0
+    kill_defunct: bool = False
+    sleep: float = 0
+    broadcast: bool = True
 
 
 def error(message: str) -> NoReturn:
@@ -143,10 +156,10 @@ def get_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def args_to_hostnames(args: argparse.Namespace) -> list[str]:
+def destinations_to_hostnames(destinations: list[str]) -> list[str]:
     """Create a list of hostnames from the user args."""
     hostnames: list[str] = []
-    for host_spec in args.destinations:
+    for host_spec in destinations:
         spec = host_spec
         hostname = None
         # Strip down spec until it's just a hostname
@@ -155,7 +168,8 @@ def args_to_hostnames(args: argparse.Namespace) -> list[str]:
         if "]" in spec:
             # IPv6 [2100:1111::1111] square bracket syntax
             hostname = spec.split("]")[0].lstrip("[")
-            spec = spec.split("]")[1]
+            hostnames.append(hostname)
+            continue
         if ":" in spec:
             spec = spec.split(":")[0]
         if spec:
@@ -183,7 +197,6 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
         if args.port:
             logger.debug(f"Setting default port {args.port}")
             port = args.port
-
         # Strip down spec until it's just a hostname
         if "@" in spec:
             user = spec.split("@")[0]
@@ -197,10 +210,8 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
             spec = spec.split(":")[0]
         if spec:
             hostname = spec
-
         if not hostname:
             error(f"ssh host '{host_spec}' does not appear to include a hostname.")
-
         ssh_string = hostname
         if user:
             logger.debug(f"User for host {hostname} is {user}")
@@ -220,14 +231,12 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
         ssh_string = " ".join([args.binary, ssh_string])
         if args.caffeine:
             ssh_string = " ".join(["caffeinate -dimsu", ssh_string])
-
         logger.debug(f"ssh_string for host {hostname} is: {ssh_string}")
         ssh_strings.append(ssh_string)
-
     return ssh_strings
 
 
-def get_user_shell() -> Optional[str]:
+def get_user_shell() -> str:
     """Find the user's shell, or whichever bash is first in PATH"""
     shell: str | None = os.environ.get("SHELL")
     if not shell:
@@ -242,27 +251,41 @@ def get_user_shell() -> Optional[str]:
     return shell
 
 
-def args_to_columns(args: argparse.Namespace) -> int:
+def set_columns(columns: int | None, rows: int | None, sessions: int) -> int:
     """Set a calculated number of columns, or user specified
     whichever is less
     """
-    floor_square: int = floor(sqrt(len(args.destinations)))
-    if args.columns is not None and args.columns < 1:
+    floor_square: int = floor(sqrt(sessions))
+    if columns is not None and columns < 1:
         error("Columns cannot be < 1")
-    if args.rows is not None and args.rows < 1:
+    if rows is not None and rows < 1:
         error("Rows cannot be < 1")
-    if args.columns:
-        if args.columns <= floor_square:
-            logger.debug(f"Using columns argument: {args.columns}")
-            return args.columns
+    if columns:
+        if columns <= floor_square:
+            logger.debug(f"Using columns argument: {columns}")
+            return columns
         logger.debug("Not using columns argument - sqrt is lower")
-    if args.rows:
-        columns = ceil(len(args.destinations) / args.rows)
+    if rows:
+        calc_columns = ceil(sessions / args.rows)
         logger.debug(
-            f"Using {columns} columns from {len(args.destinations)} destinations, {args.rows} rows"
+            f"Using {calc_columns} columns from {sessions} destinations, {rows} rows"
         )
-        return columns
+        return calc_columns
     return floor_square
+
+
+def build_config(args: argparse.Namespace) -> Config:
+    """Build a config object from the user args"""
+    config = Config()
+    config.ssh_strings = args_to_ssh_strings(args)
+    config.hostnames = destinations_to_hostnames(args.destinations)
+    config.shell = get_user_shell()
+    config.cols = set_columns(args.columns, args.rows, len(args.destinations))
+    config.rows = ceil(len(config.ssh_strings) / config.cols)
+    config.kill_defunct = args.kill
+    config.sleep = args.sleep
+    config.broadcast = not args.nobroadcast
+    return config
 
 
 def gen_ssh_profile() -> iterm2.LocalWriteOnlyProfile:
@@ -278,7 +301,7 @@ def gen_ssh_profile() -> iterm2.LocalWriteOnlyProfile:
     return profile
 
 
-def gen_spacer_profile() -> iterm2.LocalWriteOnlyProfile:
+def gen_spacer_profile(shell: str) -> iterm2.LocalWriteOnlyProfile:
     """iTerm profile for spacer panes
     Just spit out a message a wait
     """
@@ -290,7 +313,7 @@ def gen_spacer_profile() -> iterm2.LocalWriteOnlyProfile:
 
 
 async def sessions_list(connection: Connection) -> None:
-    # Print out sessions started by csshi
+    """Print out sessions started by csshi"""
     logger.debug("Connecting to iTerm")
     app = await iterm2.async_get_app(connection)
     logger.debug("Connected")
@@ -309,7 +332,7 @@ async def sessions_list(connection: Connection) -> None:
 
 
 async def set_broadcast(app: App, connection: Connection, tab: Tab) -> None:
-    # Attach user input to the ssh panes
+    """Attach user input to the ssh panes"""
     domain = iterm2.broadcast.BroadcastDomain()
     for session in tab.sessions:
         domain.add_session(session)
@@ -321,7 +344,7 @@ async def set_broadcast(app: App, connection: Connection, tab: Tab) -> None:
 
 
 async def reap_dead_sessions(app: App, connection: Connection, tab: Tab) -> None:
-    # Wait for termination messages, and close any terminated sessions
+    """Wait for termination messages, and close any terminated sessions"""
     async with iterm2.SessionTerminationMonitor(connection) as mon:
         while tab.sessions:
             logger.debug(f"Active sessions: {tab.sessions}")
@@ -342,7 +365,7 @@ async def reap_dead_sessions(app: App, connection: Connection, tab: Tab) -> None
                 logger.debug(f"Session for {session_id} gone")
 
 
-async def sessions_run(connection: Connection) -> None:
+async def sessions_run(config: Config, connection: Connection) -> None:
     """Do the thing.
     This is getting a bit long, but it's all procedural
     stuff, so just sit back and enjoy the ride.
@@ -351,65 +374,65 @@ async def sessions_run(connection: Connection) -> None:
     logger.debug("Launching iTerm...")
     NSWorkspace.sharedWorkspace().launchApplication_("iTerm")
     logger.debug("iTerm launched")
-    ssh_exec_string = f"{shell} -c '{{ssh_string}}'"
+    ssh_exec_string = f"{config.shell} -c '{{ssh_string}}'"
     logger.debug(f"Command string is {ssh_exec_string}")
     ssh_profile = gen_ssh_profile()
-    spacer_profile = gen_spacer_profile()
-
+    spacer_profile = gen_spacer_profile(config.shell)
     logger.debug("Connecting to iTerm")
     app = await iterm2.async_get_app(connection)
     logger.debug("Connected")
-
     host_ind = 0
-
     # Launch the first pane straight into ssh
-    logger.debug("Launching 1st pane")
-    ssh_profile.set_command(ssh_exec_string.format(ssh_string=ssh_strings[host_ind]))
-    ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
+    logger.debug(f"Launching 1st pane, ssh string: {config.ssh_strings[host_ind]}")
+    ssh_profile.set_command(
+        ssh_exec_string.format(ssh_string=config.ssh_strings[host_ind])
+    )
+    ssh_profile.set_name(f"{session_name_prefix}{config.hostnames[host_ind]}")
     myterm = await iterm2.Window.async_create(
         connection, profile_customizations=ssh_profile
     )
-
     tab = myterm.current_tab
-
     # Launch the rest of the first row into ssh
     # First row will always be all ssh panes, no spacers
     column_heads: list[Session] = [tab.current_session]
-    for _ in range(cols - 1):
-        logger.debug(f"Sleeping for {sleep} seconds")
-        await asyncio.sleep(sleep)
+    for _ in range(config.cols - 1):
+        logger.debug(f"Sleeping for {config.sleep} seconds")
+        await asyncio.sleep(config.sleep)
         host_ind += 1
         ssh_profile.set_command(
-            ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
+            ssh_exec_string.format(ssh_string=config.ssh_strings[host_ind])
         )
-        ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
-        logger.debug("Splitting pane for ssh")
+        ssh_profile.set_name(f"{session_name_prefix}{config.hostnames[host_ind]}")
+        logger.debug(f"Splitting pane, ssh string: {config.ssh_strings[host_ind]}")
         column_heads.append(
             await tab.current_session.async_split_pane(
                 vertical=True, profile_customizations=ssh_profile
             )
         )
-
     # Create the rest of the pane rows, either as ssh or spacer
-    total_sessions = cols
+    total_sessions = config.cols
     column_tails = column_heads.copy()  # new pane rows are split from the bottom
-    for _ in range(rows - 1):
-        for j in range(cols):
+    for _ in range(config.rows - 1):
+        for j in range(config.cols):
             total_sessions += 1
-            if total_sessions <= len(ssh_strings):
+            if total_sessions <= len(config.ssh_strings):
                 # Still launching ssh panes
                 host_ind += 1
                 ssh_profile.set_command(
-                    ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
+                    ssh_exec_string.format(ssh_string=config.ssh_strings[host_ind])
                 )
-                ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
-                logger.debug(f"Sleeping for {sleep} seconds")
-                await asyncio.sleep(sleep)
-                logger.debug("Splitting pane for ssh")
+                ssh_profile.set_name(
+                    f"{session_name_prefix}{config.hostnames[host_ind]}"
+                )
+                logger.debug(f"Sleeping for {config.sleep} seconds")
+                await asyncio.sleep(config.sleep)
+                logger.debug(
+                    f"Splitting pane, ssh string: {config.ssh_strings[host_ind]}"
+                )
                 last = await column_tails[j].async_split_pane(
                     vertical=False, profile_customizations=ssh_profile
                 )
-            elif not kill_defunct:
+            elif not config.kill_defunct:
                 # We've launched all of the ssh panes
                 # If '-k' flag is _not_ specified, launch spacer panes to
                 # fill the last row and keep the pane sizes consistent
@@ -417,20 +440,18 @@ async def sessions_run(connection: Connection) -> None:
                 last = await column_tails[j].async_split_pane(
                     vertical=False, profile_customizations=spacer_profile
                 )
+            else:
+                continue
             column_tails[j] = last
-
-    if broadcast:
+    if config.broadcast:
         await set_broadcast(app, connection, tab)
-
-    # Tidy up the window
     logger.debug("Arranging panes")
     await iterm2.MainMenu.async_select_menu_item(
         connection, "Arrange Split Panes Evenly"
     )
     logger.debug("Activating 1st pane")
     await tab.sessions[0].async_activate()
-
-    if kill_defunct:
+    if config.kill_defunct:
         await reap_dead_sessions(app, connection, tab)
 
 
@@ -441,25 +462,16 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-
     if args.list_sessions:
         logger.debug("Entering sessions_list()")
         iterm2.run_until_complete(sessions_list)
         logger.debug("sessions_list() has completed. Exiting.")
         sys.exit(0)
-
     if not args.destinations:
         parser.print_usage()
         error("The following arguments are required: destination")
-
-    ssh_strings = args_to_ssh_strings(args)
-    hostnames = args_to_hostnames(args)
-    shell = get_user_shell()
-    cols = args_to_columns(args)
-    rows = ceil(len(ssh_strings) / cols)
-    kill_defunct = args.kill
-    sleep = args.sleep
-    broadcast = not args.nobroadcast
+    config: Config = build_config(args)
+    sessions_run_partial = partial(sessions_run, config)
     logger.debug("Entering sessions_run()")
-    iterm2.run_until_complete(sessions_run)
+    iterm2.run_until_complete(sessions_run_partial)
     logger.debug("sessions_run() has completed. Exiting.")
