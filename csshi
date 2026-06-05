@@ -25,10 +25,11 @@ from dataclasses import dataclass, field
 from functools import partial
 from math import ceil, floor, sqrt
 from subprocess import CompletedProcess
+from time import sleep
 from typing import NoReturn
 
 import iterm2
-from AppKit import NSWorkspace
+from AppKit import NSRunningApplication, NSWorkspace, NSWorkspaceOpenConfiguration
 from iterm2.app import App
 from iterm2.connection import Connection
 from iterm2.profile import TitleComponents
@@ -365,6 +366,13 @@ async def reap_dead_sessions(app: App, connection: Connection, tab: Tab) -> None
                 logger.debug(f"Session for {session_id} gone")
 
 
+def launch_handler(app, launch_error) -> None:
+    """Handle the iTerm launch callback"""
+    if launch_error:
+        error("Could not launch iTerm2.")
+    return None
+
+
 async def sessions_run(config: Config, connection: Connection) -> None:
     """Do the thing.
     This is getting a bit long, but it's all procedural
@@ -470,9 +478,18 @@ if __name__ == "__main__":
     sessions_run_partial = partial(sessions_run, config)
     logger.debug("Launching iTerm...")
     workspace = NSWorkspace.sharedWorkspace()
-    workspace.launchAppWithBundleIdentifier_options_additionalEventParamDescriptor_launchIdentifier_(
-        "com.googlecode.iterm2", 0, None, None
+    url = workspace.URLForApplicationWithBundleIdentifier_("com.googlecode.iterm2")
+    if not url:
+        error("Could not find iTerm2 application URL. Is iTerm2 installed?")
+    config = NSWorkspaceOpenConfiguration.configuration()
+    workspace.openApplicationAtURL_configuration_completionHandler_(
+        url, config, launch_handler
     )
+    while not NSRunningApplication.runningApplicationsWithBundleIdentifier_(
+        "com.googlecode.iterm2"
+    ):
+        logger.debug("Waiting for iTerm2 to launch...")
+        sleep(0.5)
     logger.debug("Entering sessions_run()")
     iterm2.run_until_complete(sessions_run_partial)
     logger.debug("sessions_run() has completed. Exiting.")
