@@ -17,6 +17,7 @@ if not, write to the Free Software Foundation, Inc.,
 
 import argparse
 import asyncio
+import logging
 import os
 import subprocess
 import sys
@@ -32,6 +33,8 @@ from iterm2.profile import TitleComponents
 from iterm2.session import Session
 from iterm2.tab import Tab
 
+logger: logging.Logger = logging.getLogger(__name__)
+
 # We prepend U+2064 INVISIBLE PLUS to session names
 # so we can find sessions we have created later on
 session_name_prefix = "\u2064"
@@ -39,14 +42,8 @@ session_name_prefix = "\u2064"
 
 def error(message: str) -> NoReturn:
     """Squeak and keel over"""
-    sys.stderr.write("ERROR: " + message + "\n")
+    logger.error(message)
     sys.exit(1)
-
-
-def debug(message: str) -> None:
-    """Tell me more"""
-    if debugging:
-        sys.stderr.write("DEBUG: " + message + "\n")
 
 
 def get_arg_parser() -> argparse.ArgumentParser:
@@ -181,10 +178,10 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
         hostname = None
         port = None
         if args.username:
-            debug(f"Setting default user {args.username}")
+            logger.debug(f"Setting default user {args.username}")
             user = args.username
         if args.port:
-            debug(f"Setting default port {args.port}")
+            logger.debug(f"Setting default port {args.port}")
             port = args.port
 
         # Strip down spec until it's just a hostname
@@ -206,17 +203,17 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
 
         ssh_string = hostname
         if user:
-            debug(f"User for host {hostname} is {user}")
+            logger.debug(f"User for host {hostname} is {user}")
             ssh_string = " ".join(["-l", user, ssh_string])
         if port:
-            debug(f"Port for host {hostname} is {port}")
+            logger.debug(f"Port for host {hostname} is {port}")
             ssh_string = " ".join(["-p", str(port), ssh_string])
         if args.jumphost:
-            debug(f"Setting jumphost for host {hostname} to {args.jumphost}")
+            logger.debug(f"Setting jumphost for host {hostname} to {args.jumphost}")
             ssh_string = " ".join(["-J", args.jumphost, ssh_string])
         if args.options:
             for option_count in range(len(args.options)):
-                debug(
+                logger.debug(
                     f'Setting option for host {hostname}: "{args.options[option_count]}"'
                 )
                 ssh_string = " ".join(["-o", args.options[option_count], ssh_string])
@@ -224,7 +221,7 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
         if args.caffeine:
             ssh_string = " ".join(["caffeinate -dimsu", ssh_string])
 
-        debug(f"ssh_string for host {hostname} is: {ssh_string}")
+        logger.debug(f"ssh_string for host {hostname} is: {ssh_string}")
         ssh_strings.append(ssh_string)
 
     return ssh_strings
@@ -241,7 +238,7 @@ def get_user_shell() -> Optional[str]:
         except subprocess.CalledProcessError:
             error("Could not find a local shell to run. Set $SHELL or install bash.")
         shell = str(pcomplete.stdout.decode("utf-8").strip())
-    debug(f"Using shell {shell}")
+    logger.debug(f"Using shell {shell}")
     return shell
 
 
@@ -256,12 +253,12 @@ def args_to_columns(args: argparse.Namespace) -> int:
         error("Rows cannot be < 1")
     if args.columns:
         if args.columns <= floor_square:
-            debug(f"Using columns argument: {args.columns}")
+            logger.debug(f"Using columns argument: {args.columns}")
             return args.columns
-        debug("Not using columns argument - sqrt is lower")
+        logger.debug("Not using columns argument - sqrt is lower")
     if args.rows:
         columns = ceil(len(args.destinations) / args.rows)
-        debug(
+        logger.debug(
             f"Using {columns} columns from {len(args.destinations)} destinations, {args.rows} rows"
         )
         return columns
@@ -294,9 +291,9 @@ def gen_spacer_profile() -> iterm2.LocalWriteOnlyProfile:
 
 async def sessions_list(connection: Connection) -> None:
     # Print out sessions started by csshi
-    debug("Connecting to iTerm")
+    logger.debug("Connecting to iTerm")
     app = await iterm2.async_get_app(connection)
-    debug("Connected")
+    logger.debug("Connected")
     windows: dict[str, list[Session]] = {}
     for window in app.windows:
         windows[window.window_id] = []
@@ -318,7 +315,7 @@ async def set_broadcast(app: App, connection: Connection, tab: Tab) -> None:
         domain.add_session(session)
     bc_domains = app.broadcast_domains
     bc_domains.append(domain)
-    debug("Enabling input broadcast")
+    logger.debug("Enabling input broadcast")
     await iterm2.async_set_broadcast_domains(connection, bc_domains)
     return None
 
@@ -327,22 +324,22 @@ async def reap_dead_sessions(app: App, connection: Connection, tab: Tab) -> None
     # Wait for termination messages, and close any terminated sessions
     async with iterm2.SessionTerminationMonitor(connection) as mon:
         while tab.sessions:
-            debug(f"Active sessions: {tab.sessions}")
-            debug("Waiting for next session to close...")
+            logger.debug(f"Active sessions: {tab.sessions}")
+            logger.debug("Waiting for next session to close...")
             session_id = await mon.async_get()
-            debug(f"Got termination for {session_id}")
+            logger.debug(f"Got termination for {session_id}")
             session = app.get_session_by_id(session_id)
             if session:
                 if session in tab.sessions:
-                    debug(f"Closing session {session_id}")
+                    logger.debug(f"Closing session {session_id}")
                     await session.async_close()
                     if tab.sessions == [session]:
-                        debug(f"Session for {session_id} was last session")
+                        logger.debug(f"Session for {session_id} was last session")
                         return
                 else:
-                    debug(f"Ignoring session {session_id} - not in our tab")
+                    logger.debug(f"Ignoring session {session_id} - not in our tab")
             else:
-                debug(f"Session for {session_id} gone")
+                logger.debug(f"Session for {session_id} gone")
 
 
 async def sessions_run(connection: Connection) -> None:
@@ -351,22 +348,22 @@ async def sessions_run(connection: Connection) -> None:
     stuff, so just sit back and enjoy the ride.
     """
     # Fire up iTerm if it's not already running
-    debug("Launching iTerm...")
+    logger.debug("Launching iTerm...")
     NSWorkspace.sharedWorkspace().launchApplication_("iTerm")
-    debug("iTerm launched")
+    logger.debug("iTerm launched")
     ssh_exec_string = f"{shell} -c '{{ssh_string}}'"
-    debug(f"Command string is {ssh_exec_string}")
+    logger.debug(f"Command string is {ssh_exec_string}")
     ssh_profile = gen_ssh_profile()
     spacer_profile = gen_spacer_profile()
 
-    debug("Connecting to iTerm")
+    logger.debug("Connecting to iTerm")
     app = await iterm2.async_get_app(connection)
-    debug("Connected")
+    logger.debug("Connected")
 
     host_ind = 0
 
     # Launch the first pane straight into ssh
-    debug("Launching 1st pane")
+    logger.debug("Launching 1st pane")
     ssh_profile.set_command(ssh_exec_string.format(ssh_string=ssh_strings[host_ind]))
     ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
     myterm = await iterm2.Window.async_create(
@@ -379,14 +376,14 @@ async def sessions_run(connection: Connection) -> None:
     # First row will always be all ssh panes, no spacers
     column_heads: list[Session] = [tab.current_session]
     for _ in range(cols - 1):
-        debug(f"Sleeping for {sleep} seconds")
+        logger.debug(f"Sleeping for {sleep} seconds")
         await asyncio.sleep(sleep)
         host_ind += 1
         ssh_profile.set_command(
             ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
         )
         ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
-        debug("Splitting pane for ssh")
+        logger.debug("Splitting pane for ssh")
         column_heads.append(
             await tab.current_session.async_split_pane(
                 vertical=True, profile_customizations=ssh_profile
@@ -406,9 +403,9 @@ async def sessions_run(connection: Connection) -> None:
                     ssh_exec_string.format(ssh_string=ssh_strings[host_ind])
                 )
                 ssh_profile.set_name(f"{session_name_prefix}{hostnames[host_ind]}")
-                debug(f"Sleeping for {sleep} seconds")
+                logger.debug(f"Sleeping for {sleep} seconds")
                 await asyncio.sleep(sleep)
-                debug("Splitting pane for ssh")
+                logger.debug("Splitting pane for ssh")
                 last = await column_tails[j].async_split_pane(
                     vertical=False, profile_customizations=ssh_profile
                 )
@@ -416,7 +413,7 @@ async def sessions_run(connection: Connection) -> None:
                 # We've launched all of the ssh panes
                 # If '-k' flag is _not_ specified, launch spacer panes to
                 # fill the last row and keep the pane sizes consistent
-                debug("Splitting pane for spacer")
+                logger.debug("Splitting pane for spacer")
                 last = await column_tails[j].async_split_pane(
                     vertical=False, profile_customizations=spacer_profile
                 )
@@ -426,11 +423,11 @@ async def sessions_run(connection: Connection) -> None:
         await set_broadcast(app, connection, tab)
 
     # Tidy up the window
-    debug("Arranging panes")
+    logger.debug("Arranging panes")
     await iterm2.MainMenu.async_select_menu_item(
         connection, "Arrange Split Panes Evenly"
     )
-    debug("Activating 1st pane")
+    logger.debug("Activating 1st pane")
     await tab.sessions[0].async_activate()
 
     if kill_defunct:
@@ -440,12 +437,15 @@ async def sessions_run(connection: Connection) -> None:
 if __name__ == "__main__":
     parser = get_arg_parser()
     args = parser.parse_args()
-    debugging = args.debug
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     if args.list_sessions:
-        debug("Entering sessions_list()")
+        logger.debug("Entering sessions_list()")
         iterm2.run_until_complete(sessions_list)
-        debug("sessions_list() has completed. Exiting.")
+        logger.debug("sessions_list() has completed. Exiting.")
         sys.exit(0)
 
     if not args.destinations:
@@ -460,6 +460,6 @@ if __name__ == "__main__":
     kill_defunct = args.kill
     sleep = args.sleep
     broadcast = not args.nobroadcast
-    debug("Entering sessions_run()")
+    logger.debug("Entering sessions_run()")
     iterm2.run_until_complete(sessions_run)
-    debug("sessions_run() has completed. Exiting.")
+    logger.debug("sessions_run() has completed. Exiting.")
