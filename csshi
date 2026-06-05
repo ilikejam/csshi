@@ -188,7 +188,6 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
     ssh_strings: list[str] = []
     for host_spec in args.destinations:
         spec = host_spec
-        ssh_string = ""
         user = None
         hostname = None
         port = None
@@ -224,11 +223,9 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
             logger.debug(f"Setting jumphost for host {hostname} to {args.jumphost}")
             ssh_string = " ".join(["-J", args.jumphost, ssh_string])
         if args.options:
-            for option_count in range(len(args.options)):
-                logger.debug(
-                    f'Setting option for host {hostname}: "{args.options[option_count]}"'
-                )
-                ssh_string = " ".join([args.options[option_count], ssh_string])
+            for option in args.options:
+                logger.debug(f'Setting option for host {hostname}: "{option}"')
+                ssh_string = " ".join([ssh_string, option])
         ssh_string = " ".join([args.binary, ssh_string])
         if args.caffeine:
             ssh_string = " ".join(["caffeinate -dimsu", ssh_string])
@@ -247,7 +244,7 @@ def get_user_shell() -> str:
             )
         except subprocess.CalledProcessError:
             error("Could not find a local shell to run. Set $SHELL or install bash.")
-        shell = str(pcomplete.stdout.decode("utf-8").strip())
+        shell = pcomplete.stdout.decode().strip()
     logger.debug(f"Using shell {shell}")
     return shell
 
@@ -267,7 +264,7 @@ def set_columns(columns: int | None, rows: int | None, sessions: int) -> int:
             return columns
         logger.debug("Not using columns argument - sqrt is lower")
     if rows:
-        calc_columns = ceil(sessions / args.rows)
+        calc_columns = ceil(sessions / rows)
         logger.debug(
             f"Using {calc_columns} columns from {sessions} destinations, {rows} rows"
         )
@@ -341,7 +338,6 @@ async def set_broadcast(app: App, connection: Connection, tab: Tab) -> None:
     bc_domains.append(domain)
     logger.debug("Enabling input broadcast")
     await iterm2.async_set_broadcast_domains(connection, bc_domains)
-    return None
 
 
 async def reap_dead_sessions(app: App, connection: Connection, tab: Tab) -> None:
@@ -367,10 +363,9 @@ async def reap_dead_sessions(app: App, connection: Connection, tab: Tab) -> None
 
 
 def launch_handler(app, launch_error) -> None:
-    """Handle the iTerm launch callback"""
+    """Handle iTerm2 launch callback"""
     if launch_error:
         error("Could not launch iTerm2.")
-    return None
 
 
 async def sessions_run(config: Config, connection: Connection) -> None:
@@ -392,10 +387,10 @@ async def sessions_run(config: Config, connection: Connection) -> None:
         ssh_exec_string.format(ssh_string=config.ssh_strings[host_ind])
     )
     ssh_profile.set_name(f"{session_name_prefix}{config.hostnames[host_ind]}")
-    myterm = await iterm2.Window.async_create(
+    window = await iterm2.Window.async_create(
         connection, profile_customizations=ssh_profile
     )
-    tab = myterm.current_tab
+    tab = window.current_tab
     # Launch the rest of the first row into ssh
     # First row will always be all ssh panes, no spacers
     column_heads: list[Session] = [tab.current_session]
@@ -475,21 +470,21 @@ if __name__ == "__main__":
         parser.print_usage()
         error("The following arguments are required: destination")
     config: Config = build_config(args)
-    sessions_run_partial = partial(sessions_run, config)
     logger.debug("Launching iTerm...")
     workspace = NSWorkspace.sharedWorkspace()
     url = workspace.URLForApplicationWithBundleIdentifier_("com.googlecode.iterm2")
     if not url:
         error("Could not find iTerm2 application URL. Is iTerm2 installed?")
-    config = NSWorkspaceOpenConfiguration.configuration()
+    nsconfig = NSWorkspaceOpenConfiguration.configuration()
     workspace.openApplicationAtURL_configuration_completionHandler_(
-        url, config, launch_handler
+        url, nsconfig, launch_handler
     )
     while not NSRunningApplication.runningApplicationsWithBundleIdentifier_(
         "com.googlecode.iterm2"
     ):
         logger.debug("Waiting for iTerm2 to launch...")
         sleep(0.5)
+    sessions_run_partial = partial(sessions_run, config)
     logger.debug("Entering sessions_run()")
     iterm2.run_until_complete(sessions_run_partial)
     logger.debug("sessions_run() has completed. Exiting.")
