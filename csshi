@@ -144,7 +144,7 @@ def get_arg_parser() -> argparse.ArgumentParser:
         "destinations",
         metavar="destination",
         nargs="*",
-        help="[user@]host[:port] ssh server specification. Use square brackets around IPv6 IP adresses",
+        help="[user@]host[:port] ssh server specification. NB: Square brackets MUST be used around IPv6 IP adresses",
     )
     parser.add_argument(
         "-L",

@@ -38,8 +38,8 @@ usage: csshi [-h] [-d] [-k] [-c] [-n] [-l USERNAME] [-p PORT] [-J JUMPHOST]
 Run multiple ssh connections concurrently in an iTerm2 terminal.
 
 positional arguments:
-  destination           [user@]host[:port] ssh server specification. Use
-                        square brackets around IPv6 IP adresses
+  destination           [user@]host[:port] ssh server specification. NB:
+                        Square brackets MUST be used around IPv6 IP adresses
 
 options:
   -h, --help            show this help message and exit
@@ -47,24 +47,21 @@ options:
   -k, --kill-inactive   Don't create spacer panes and kill inactive panes
   -c, --caffeinate      Try to keep the Mac awake
   -n, --no-broadcast    Don't enable input broadcast
-  -l USERNAME, --username USERNAME
+  -l, --username USERNAME
                         Login username, overridden per-host by specifying
                         'user@host'
-  -p PORT, --port PORT  ssh server port, overridden per-host by specifying
+  -p, --port PORT       ssh server port, overridden per-host by specifying
                         'host:port
-  -J JUMPHOST, --jump JUMPHOST
-                        ProxyJump host specification, like
+  -J, --jump JUMPHOST   ProxyJump host specification, like
                         [user@]jumphost[:port]
-  -s SLEEP, --sleep SLEEP
-                        Sleep time in seconds between hosts. Defaults to 0
-  -o OPTIONS, --options OPTIONS
+  -s, --sleep SLEEP     Sleep time in seconds between hosts. Defaults to 0
+  -o, --options OPTIONS
                         Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'.
                         Can be specified multiple times.
-  -b BINARY, --binary BINARY
-                        SSH binary to use. Defaults to 'ssh'
-  -C COLUMNS, --columns COLUMNS
+  -b, --binary BINARY   SSH binary to use. Defaults to 'ssh'
+  -C, --columns COLUMNS
                         Maximum number of columns to use.
-  -R ROWS, --rows ROWS  Maximum number of rows to use.
+  -R, --rows ROWS       Maximum number of rows to use.
   -L, --list-sessions   Print space-separated list of csshi sessions, one line
                         per window
 ```
