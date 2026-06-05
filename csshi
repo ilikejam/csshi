@@ -227,7 +227,7 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
                 logger.debug(
                     f'Setting option for host {hostname}: "{args.options[option_count]}"'
                 )
-                ssh_string = " ".join(["-o", args.options[option_count], ssh_string])
+                ssh_string = " ".join([args.options[option_count], ssh_string])
         ssh_string = " ".join([args.binary, ssh_string])
         if args.caffeine:
             ssh_string = " ".join(["caffeinate -dimsu", ssh_string])
