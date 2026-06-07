@@ -1,10 +1,10 @@
 [project]
 name = "csshi"
 dependencies = [
-  "iterm2==2.14",
-  "protobuf==7.34.0",
+  "iterm2==2.20",
+  "protobuf==7.35.0",
   "websockets==16.0",
-  "pyobjc-core==12.1",
-  "pyobjc-framework-Cocoa==12.1",
+  "pyobjc-core==12.2",
+  "pyobjc-framework-Cocoa==12.2",
 ]
-version = 'v1.15'
+version = 'v1.17'
