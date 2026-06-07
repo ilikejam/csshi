@@ -19,6 +19,7 @@ import argparse
 import asyncio
 import logging
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -44,14 +45,16 @@ session_name_prefix = "\u2064"
 
 @dataclass
 class Config:
-    ssh_strings: list[str] = field(default_factory=list)
-    hostnames: list[str] = field(default_factory=list)
-    shell: str = ""
-    cols: int = 0
-    rows: int = 0
-    kill_defunct: bool = False
-    sleep: float = 0
     broadcast: bool = True
+    cols: int = 0
+    debug: bool = False
+    hostnames: list[str] = field(default_factory=list)
+    kill_defunct: bool = False
+    rows: int = 0
+    shell: str = ""
+    sleep: float = 0
+    ssh_exec_string: str = ""
+    ssh_strings: list[str] = field(default_factory=list)
 
 
 def error(message: str) -> NoReturn:
@@ -157,26 +160,53 @@ def get_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def destination_to_hostname(destination: str) -> str:
+    """Parse out a hostname from a user-specified destination spec"""
+    hostname: str = ""
+    if re.search(r"\[..*\]", destination):
+        # IPv6 [2100:1111::1111] square bracket syntax
+        hostname = destination.split("[")[1].split("]")[0]
+    elif "@" in destination:
+        # Anything after @, and before any : should be a hostname
+        hostname = destination.split("@")[1].split(":")[0]
+    elif ":" in destination:
+        # Anything before : should be a hostname
+        hostname = destination.split(":")[0]
+    else:
+        hostname = destination
+    logger.debug(f"Found hostname {hostname} in destination {destination}")
+    return hostname
+
+
+def destination_to_user(destination: str) -> str | None:
+    """Parse out a username from a user-specified destination spec"""
+    if "@" in destination:
+        user: str = destination.split("@")[0]
+        logger.debug(f"Found user {user} in destination {destination}")
+        return user
+    else:
+        return None
+
+
+def destination_to_port(destination: str) -> str | None:
+    """Parse out a port from a user-specified destination spec"""
+    port: str = ""
+    if "[" in destination and "]" in destination:
+        port = destination.split("]")[1].lstrip(":")
+    elif ":" in destination:
+        port = destination.split(":")[1]
+    if port:
+        logger.debug(f"Found port {port} in destination {destination}")
+        return port
+    else:
+        return None
+
+
 def destinations_to_hostnames(destinations: list[str]) -> list[str]:
     """Create a list of hostnames from the user args."""
     hostnames: list[str] = []
-    for host_spec in destinations:
-        spec = host_spec
-        hostname = None
-        # Strip down spec until it's just a hostname
-        if "@" in spec:
-            spec = spec.split("@")[1]
-        if "]" in spec:
-            # IPv6 [2100:1111::1111] square bracket syntax
-            hostname = spec.split("]")[0].lstrip("[")
-            hostnames.append(hostname)
-            continue
-        if ":" in spec:
-            spec = spec.split(":")[0]
-        if spec:
-            hostname = spec
-        if not hostname:
-            error(f"ssh host '{host_spec}' does not appear to include a hostname.")
+    for destination in destinations:
+        hostname: str = destination_to_hostname(destination)
         hostnames.append(hostname)
     return hostnames
 
@@ -186,32 +216,16 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
     ssh destination specs like user@ and :port override the '-l' and '-p' args.
     """
     ssh_strings: list[str] = []
-    for host_spec in args.destinations:
-        spec = host_spec
-        user = None
-        hostname = None
-        port = None
-        if args.username:
-            logger.debug(f"Setting default user {args.username}")
-            user = args.username
-        if args.port:
-            logger.debug(f"Setting default port {args.port}")
-            port = args.port
-        # Strip down spec until it's just a hostname
-        if "@" in spec:
-            user = spec.split("@")[0]
-            spec = spec.split("@")[1]
-        if "]" in spec:
-            # IPv6 [2100:1111::1111] square bracket syntax
-            hostname = spec.split("]")[0].lstrip("[")
-            spec = spec.split("]")[1]
-        if ":" in spec:
-            port = spec.split(":")[1]
-            spec = spec.split(":")[0]
-        if spec:
-            hostname = spec
+    for destination in args.destinations:
+        logger.debug(f"Setting default user {args.username or '<Not specified>'}")
+        user = args.username
+        logger.debug(f"Setting default port {args.port or '<Not specified>'}")
+        port = args.port
+        hostname: str = destination_to_hostname(destination)
+        user = destination_to_user(destination) or user
+        port = destination_to_port(destination) or port
         if not hostname:
-            error(f"ssh host '{host_spec}' does not appear to include a hostname.")
+            error(f"ssh host '{destination}' does not appear to include a hostname.")
         ssh_string = hostname
         if user:
             logger.debug(f"User for host {hostname} is {user}")
@@ -220,7 +234,7 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
             logger.debug(f"Port for host {hostname} is {port}")
             ssh_string = " ".join(["-p", str(port), ssh_string])
         if args.jumphost:
-            logger.debug(f"Setting jumphost for host {hostname} to {args.jumphost}")
+            logger.debug(f"Jumphost for host {hostname} is {args.jumphost}")
             ssh_string = " ".join(["-J", args.jumphost, ssh_string])
         if args.options:
             for option in args.options:
@@ -237,7 +251,9 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
 def get_user_shell() -> str:
     """Find the user's shell, or whichever bash is first in PATH"""
     shell: str | None = os.environ.get("SHELL")
-    if not shell:
+    if shell:
+        logger.debug(f"Using shell {shell} from $SHELL")
+    else:
         try:
             pcomplete: CompletedProcess = subprocess.run(
                 "command -v bash", shell=True, check=True, capture_output=True
@@ -245,7 +261,7 @@ def get_user_shell() -> str:
         except subprocess.CalledProcessError:
             error("Could not find a local shell to run. Set $SHELL or install bash.")
         shell = pcomplete.stdout.decode().strip()
-    logger.debug(f"Using shell {shell}")
+        logger.debug(f"No $SHELL found, using {shell} from PATH")
     return shell
 
 
@@ -275,22 +291,21 @@ def set_columns(columns: int | None, rows: int | None, sessions: int) -> int:
 def build_config(args: argparse.Namespace) -> Config:
     """Build a config object from the user args"""
     config = Config()
-    config.ssh_strings = args_to_ssh_strings(args)
-    config.hostnames = destinations_to_hostnames(args.destinations)
-    config.shell = get_user_shell()
-    config.cols = set_columns(args.columns, args.rows, len(args.destinations))
-    config.rows = ceil(len(config.ssh_strings) / config.cols)
-    config.kill_defunct = args.kill
-    config.sleep = args.sleep
     config.broadcast = not args.nobroadcast
+    config.cols = set_columns(args.columns, args.rows, len(args.destinations))
+    config.debug = args.debug
+    config.hostnames = destinations_to_hostnames(args.destinations)
+    config.kill_defunct = args.kill
+    config.rows = ceil(len(config.ssh_strings) / config.cols)
+    config.shell = get_user_shell()
+    config.sleep = args.sleep
+    config.ssh_exec_string = f"{config.shell} -c '{{ssh_string}}'"
+    config.ssh_strings = args_to_ssh_strings(args)
     return config
 
 
 def gen_ssh_profile() -> iterm2.LocalWriteOnlyProfile:
-    """iTerm profile for ssh panes
-    The ssh command is set in the main loop with set_command()
-    The session title is set in the main loop with set_name()
-    """
+    """iTerm base profile for ssh panes"""
     profile = iterm2.LocalWriteOnlyProfile()
     profile.set_title_components([TitleComponents.SESSION_NAME])
     profile.set_allow_title_setting(False)
@@ -300,9 +315,7 @@ def gen_ssh_profile() -> iterm2.LocalWriteOnlyProfile:
 
 
 def gen_spacer_profile(shell: str) -> iterm2.LocalWriteOnlyProfile:
-    """iTerm profile for spacer panes
-    Just spit out a message a wait
-    """
+    """iTerm profile for spacer panes - Just spit out a message a wait"""
     profile = iterm2.LocalWriteOnlyProfile()
     profile.set_use_custom_command("Yes")
     profile.set_command(f'{shell} -c "/bin/echo PANE NOT IN USE"')
@@ -369,12 +382,7 @@ def launch_handler(app, launch_error) -> None:
 
 
 async def sessions_run(config: Config, connection: Connection) -> None:
-    """Do the thing.
-    This is getting a bit long, but it's all procedural
-    stuff, so just sit back and enjoy the ride.
-    """
-    ssh_exec_string = f"{config.shell} -c '{{ssh_string}}'"
-    logger.debug(f"Command string is {ssh_exec_string}")
+    """Launch all sessions and spacers"""
     ssh_profile = gen_ssh_profile()
     spacer_profile = gen_spacer_profile(config.shell)
     logger.debug("Connecting to iTerm")
@@ -384,7 +392,7 @@ async def sessions_run(config: Config, connection: Connection) -> None:
     # Launch the first pane straight into ssh
     logger.debug(f"Launching 1st pane, ssh_exec_string: {config.ssh_strings[host_ind]}")
     ssh_profile.set_command(
-        ssh_exec_string.format(ssh_string=config.ssh_strings[host_ind])
+        config.ssh_exec_string.format(ssh_string=config.ssh_strings[host_ind])
     )
     ssh_profile.set_name(f"{session_name_prefix}{config.hostnames[host_ind]}")
     window = await iterm2.Window.async_create(
@@ -399,7 +407,7 @@ async def sessions_run(config: Config, connection: Connection) -> None:
         await asyncio.sleep(config.sleep)
         host_ind += 1
         ssh_profile.set_command(
-            ssh_exec_string.format(ssh_string=config.ssh_strings[host_ind])
+            config.ssh_exec_string.format(ssh_string=config.ssh_strings[host_ind])
         )
         ssh_profile.set_name(f"{session_name_prefix}{config.hostnames[host_ind]}")
         logger.debug(f"Splitting pane, ssh_exec_string: {config.ssh_strings[host_ind]}")
@@ -418,7 +426,9 @@ async def sessions_run(config: Config, connection: Connection) -> None:
                 # Still launching ssh panes
                 host_ind += 1
                 ssh_profile.set_command(
-                    ssh_exec_string.format(ssh_string=config.ssh_strings[host_ind])
+                    config.ssh_exec_string.format(
+                        ssh_string=config.ssh_strings[host_ind]
+                    )
                 )
                 ssh_profile.set_name(
                     f"{session_name_prefix}{config.hostnames[host_ind]}"
@@ -432,9 +442,7 @@ async def sessions_run(config: Config, connection: Connection) -> None:
                     vertical=False, profile_customizations=ssh_profile
                 )
             elif not config.kill_defunct:
-                # We've launched all of the ssh panes
-                # If '-k' flag is _not_ specified, launch spacer panes to
-                # fill the last row and keep the pane sizes consistent
+                # If '-k' flag is _not_ specified, launch spacer panes to fill last row
                 logger.debug("Splitting pane for spacer")
                 last = await column_tails[j].async_split_pane(
                     vertical=False, profile_customizations=spacer_profile
@@ -450,7 +458,7 @@ async def sessions_run(config: Config, connection: Connection) -> None:
     )
     logger.debug("Activating 1st pane")
     await tab.sessions[0].async_activate()
-    if config.kill_defunct:
+    if config.kill_defunct or config.debug:
         await reap_dead_sessions(app, connection, tab)
 
 
