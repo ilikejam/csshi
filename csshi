@@ -291,12 +291,13 @@ def set_columns(columns: int | None, rows: int | None, sessions: int) -> int:
 def build_config(args: argparse.Namespace) -> Config:
     """Build a config object from the user args"""
     config = Config()
+    num_destinations: int = len(args.destinations)
     config.broadcast = not args.nobroadcast
-    config.cols = set_columns(args.columns, args.rows, len(args.destinations))
     config.debug = args.debug
     config.hostnames = destinations_to_hostnames(args.destinations)
     config.kill_defunct = args.kill
-    config.rows = ceil(len(config.ssh_strings) / config.cols)
+    config.cols = set_columns(args.columns, args.rows, num_destinations)
+    config.rows = ceil(num_destinations / config.cols)
     config.shell = get_user_shell()
     config.sleep = args.sleep
     config.ssh_exec_string = f"{config.shell} -c '{{ssh_string}}'"
