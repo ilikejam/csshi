@@ -7,4 +7,4 @@ dependencies = [
   "pyobjc-core==12.2",
   "pyobjc-framework-Cocoa==12.2",
 ]
-version = 'v1.17'
+version = 'v1.20'
