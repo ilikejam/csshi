@@ -50,7 +50,7 @@ options:
                         Login username, overridden per-host by specifying
                         'user@host'
   -p, --port PORT       ssh server port, overridden per-host by specifying
-                        'host:port
+                        'host:port'
   -J, --jump JUMPHOST   ProxyJump host specification, like
                         [user@]jumphost[:port]
   -s, --sleep SLEEP     Sleep time in seconds between hosts. Defaults to 0
@@ -64,6 +64,9 @@ options:
   -L, --list-sessions   Print space-separated list of csshi sessions, one line
                         per window
 ```
+
+# Bugs
+If running csshi from a different terminal emulator (e.g. Terminal) and `-k` or `-d` have been supplied; `csshi` will dump a stack trace if iTerm2 quits from under us. We still terminate normally, so only a cosmetic issue.
 
 # Tips
 If you have a file listing hostnames to connect to, use `xargs`:  
