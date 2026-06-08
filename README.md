@@ -37,7 +37,7 @@ usage: csshi [-h] [-d] [-k] [-c] [-n] [-l USERNAME] [-p PORT] [-J JUMPHOST]
 Run multiple ssh connections concurrently in an iTerm2 terminal.
 
 positional arguments:
-  destination           [user@]host[:port] ssh server specification. NB:
+  destination           [user@]host[:port] ssh connection specification. NB:
                         Square brackets MUST be used around IPv6 IP adresses
 
 options:
