@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from math import ceil, floor, sqrt
 from subprocess import CompletedProcess
-from time import sleep
+from time import monotonic, sleep
 from typing import NoReturn
 
 import iterm2
@@ -38,8 +38,7 @@ from iterm2.session import Session
 from iterm2.tab import Tab
 
 logger: logging.Logger = logging.getLogger(__name__)
-# We prepend U+2064 INVISIBLE PLUS to session names
-# so we can find sessions we have created later on
+# We prepend U+2064 INVISIBLE PLUS to session names so we know they're from csshi
 session_name_prefix = "\u2064"
 
 
@@ -103,7 +102,7 @@ def get_arg_parser() -> argparse.ArgumentParser:
         "--port",
         dest="port",
         type=int,
-        help="ssh server port, overridden per-host by specifying 'host:port",
+        help="ssh server port, overridden per-host by specifying 'host:port'",
     )
     parser.add_argument(
         "-J",
@@ -164,13 +163,10 @@ def destination_to_hostname(destination: str) -> str:
     """Parse out a hostname from a user-specified destination spec"""
     hostname: str = ""
     if re.search(r"\[..*\]", destination):
-        # IPv6 [2100:1111::1111] square bracket syntax
         hostname = destination.split("[")[1].split("]")[0]
     elif "@" in destination:
-        # Anything after @, and before any : should be a hostname
         hostname = destination.split("@")[1].split(":")[0]
     elif ":" in destination:
-        # Anything before : should be a hostname
         hostname = destination.split(":")[0]
     else:
         hostname = destination
@@ -188,13 +184,21 @@ def destination_to_user(destination: str) -> str | None:
         return None
 
 
-def destination_to_port(destination: str) -> str | None:
+def destination_to_port(destination: str) -> int | None:
     """Parse out a port from a user-specified destination spec"""
-    port: str = ""
-    if "[" in destination and "]" in destination:
-        port = destination.split("]")[1].lstrip(":")
+    port: int | None = None
+    if re.search(r"\[..*\]", destination):
+        port_str: str = destination.split("]")[1].lstrip(":")
+        if port_str:
+            try:
+                port = int(destination.split("]")[1].lstrip(":"))
+            except ValueError:
+                error(f"Port specified in {destination} is not an integer.")
     elif ":" in destination:
-        port = destination.split(":")[1]
+        try:
+            port = int(destination.split(":")[1])
+        except ValueError:
+            error(f"Port specified in {destination} is not an integer.")
     if port:
         logger.debug(f"Found port {port} in destination {destination}")
         return port
@@ -202,19 +206,8 @@ def destination_to_port(destination: str) -> str | None:
         return None
 
 
-def destinations_to_hostnames(destinations: list[str]) -> list[str]:
-    """Create a list of hostnames from the user args."""
-    hostnames: list[str] = []
-    for destination in destinations:
-        hostname: str = destination_to_hostname(destination)
-        hostnames.append(hostname)
-    return hostnames
-
-
 def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
-    """Create a list of ssh command strings from the user args.
-    ssh destination specs like user@ and :port override the '-l' and '-p' args.
-    """
+    """Create a list of ssh command strings from the user args."""
     ssh_strings: list[str] = []
     for destination in args.destinations:
         logger.debug(f"Setting default user {args.username or '<Not specified>'}")
@@ -226,23 +219,25 @@ def args_to_ssh_strings(args: argparse.Namespace) -> list[str]:
         port = destination_to_port(destination) or port
         if not hostname:
             error(f"ssh host '{destination}' does not appear to include a hostname.")
-        ssh_string = hostname
+        dest_ssh_args: list[str] = []
+        if args.caffeine:
+            dest_ssh_args.extend(["caffeinate", "-dimsu"])
+        dest_ssh_args.append(args.binary)
         if user:
             logger.debug(f"User for host {hostname} is {user}")
-            ssh_string = " ".join(["-l", user, ssh_string])
+            dest_ssh_args.extend(["-l", user])
         if port:
             logger.debug(f"Port for host {hostname} is {port}")
-            ssh_string = " ".join(["-p", str(port), ssh_string])
+            dest_ssh_args.extend(["-p", str(port)])
         if args.jumphost:
             logger.debug(f"Jumphost for host {hostname} is {args.jumphost}")
-            ssh_string = " ".join(["-J", args.jumphost, ssh_string])
+            dest_ssh_args.extend(["-J", args.jumphost])
         if args.options:
             for option in args.options:
                 logger.debug(f'Setting option for host {hostname}: "{option}"')
-                ssh_string = " ".join([ssh_string, option])
-        ssh_string = " ".join([args.binary, ssh_string])
-        if args.caffeine:
-            ssh_string = " ".join(["caffeinate -dimsu", ssh_string])
+                dest_ssh_args.append(option)
+        dest_ssh_args.append(hostname)
+        ssh_string: str = " ".join(dest_ssh_args)
         logger.debug(f"ssh_string for host {hostname} is: {ssh_string}")
         ssh_strings.append(ssh_string)
     return ssh_strings
@@ -266,9 +261,7 @@ def get_user_shell() -> str:
 
 
 def set_columns(columns: int | None, rows: int | None, sessions: int) -> int:
-    """Set a calculated number of columns, or user specified
-    whichever is less
-    """
+    """Set a calculated number of columns, or user specified, whichever is less"""
     floor_square: int = floor(sqrt(sessions))
     if columns is not None and columns < 1:
         error("Columns cannot be < 1")
@@ -294,7 +287,7 @@ def build_config(args: argparse.Namespace) -> Config:
     num_destinations: int = len(args.destinations)
     config.broadcast = not args.nobroadcast
     config.debug = args.debug
-    config.hostnames = destinations_to_hostnames(args.destinations)
+    config.hostnames = [destination_to_hostname(x) for x in args.destinations]
     config.kill_defunct = args.kill
     config.cols = set_columns(args.columns, args.rows, num_destinations)
     config.rows = ceil(num_destinations / config.cols)
@@ -329,7 +322,7 @@ async def sessions_list(connection: Connection) -> None:
     logger.debug("Connecting to iTerm")
     app = await iterm2.async_get_app(connection)
     logger.debug("Connected")
-    windows: dict[str, list[Session]] = {}
+    windows: dict[str, list[str]] = {}
     for window in app.windows:
         windows[window.window_id] = []
         for tab in window.tabs:
@@ -354,29 +347,38 @@ async def set_broadcast(app: App, connection: Connection, tab: Tab) -> None:
     await iterm2.async_set_broadcast_domains(connection, bc_domains)
 
 
-async def reap_dead_sessions(app: App, connection: Connection, tab: Tab) -> None:
+async def monitor_sessions(app: App, con: Connection, tab: Tab, reap: bool) -> None:
     """Wait for termination messages, and close any terminated sessions"""
-    async with iterm2.SessionTerminationMonitor(connection) as mon:
+    async with iterm2.SessionTerminationMonitor(con) as mon:
         while tab.sessions:
             logger.debug(f"Active sessions: {tab.sessions}")
             logger.debug("Waiting for next session to close...")
-            session_id = await mon.async_get()
+            try:
+                session_id = await asyncio.wait_for(mon.async_get(), timeout=2)
+            except asyncio.TimeoutError:
+                if not NSRunningApplication.runningApplicationsWithBundleIdentifier_(
+                    "com.googlecode.iterm2"
+                ):
+                    logger.debug("Iterm2 is not running - ending session reaper")
+                    return
+                if not tab.window:
+                    logger.debug("Window gone - ending session reaper")
+                    return
+                continue
             logger.debug(f"Got termination for {session_id}")
-            session = app.get_session_by_id(session_id)
-            if session:
-                if session in tab.sessions:
-                    logger.debug(f"Closing session {session_id}")
-                    await session.async_close()
-                    if tab.sessions == [session]:
-                        logger.debug(f"Session for {session_id} was last session")
-                        return
+            if reap:
+                session = app.get_session_by_id(session_id)
+                if session:
+                    if session in tab.sessions:
+                        logger.debug(f"Closing session {session_id}")
+                        await session.async_close()
+                    else:
+                        logger.debug(f"Ignoring session {session_id} - not in our tab")
                 else:
-                    logger.debug(f"Ignoring session {session_id} - not in our tab")
-            else:
-                logger.debug(f"Session for {session_id} gone")
+                    logger.debug(f"Session for {session_id} gone")
 
 
-def launch_handler(app, launch_error) -> None:
+def launch_handler(_, launch_error) -> None:
     """Handle iTerm2 launch callback"""
     if launch_error:
         error("Could not launch iTerm2.")
@@ -460,7 +462,7 @@ async def sessions_run(config: Config, connection: Connection) -> None:
     logger.debug("Activating 1st pane")
     await tab.sessions[0].async_activate()
     if config.kill_defunct or config.debug:
-        await reap_dead_sessions(app, connection, tab)
+        await monitor_sessions(app, connection, tab, config.kill_defunct)
 
 
 if __name__ == "__main__":
@@ -488,11 +490,14 @@ if __name__ == "__main__":
     workspace.openApplicationAtURL_configuration_completionHandler_(
         url, nsconfig, launch_handler
     )
+    deadline: float = monotonic() + 10
     while not NSRunningApplication.runningApplicationsWithBundleIdentifier_(
         "com.googlecode.iterm2"
     ):
+        if monotonic() > deadline:
+            error("Timed out waiting for iTerm2 to launch.")
         logger.debug("Waiting for iTerm2 to launch...")
-        sleep(0.5)
+        sleep(1)
     sessions_run_partial = partial(sessions_run, config)
     logger.debug("Entering sessions_run()")
     iterm2.run_until_complete(sessions_run_partial)
