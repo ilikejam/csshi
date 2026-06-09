@@ -5,14 +5,6 @@ Copyright (C) 2021-2026 David Stark
 
 This program is free software; you can redistribute it and/or modify it under the terms of
 the GNU General Public License as published by the Free Software Foundation; version 2 only.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-See the GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License along with this program;
-if not, write to the Free Software Foundation, Inc.,
-51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 """
 
 import argparse
@@ -20,18 +12,22 @@ import asyncio
 import logging
 import os
 import re
-import subprocess
+import shutil
 import sys
 from dataclasses import dataclass, field
 from functools import partial
 from math import ceil, floor, sqrt
-from subprocess import CompletedProcess
 from time import monotonic, sleep
 from typing import NoReturn
 
 import iterm2
-from AppKit import NSRunningApplication, NSWorkspace, NSWorkspaceOpenConfiguration
+from AppKit import (  # type: ignore
+    NSRunningApplication,
+    NSWorkspace,
+    NSWorkspaceOpenConfiguration,
+)
 from iterm2 import LocalWriteOnlyProfile as Profile
+from iterm2 import Window
 from iterm2.app import App
 from iterm2.connection import Connection
 from iterm2.profile import TitleComponents
@@ -47,7 +43,7 @@ session_name_prefix = "\u2064"
 class Destination:
     host: str
     user: str | None = None
-    port: int | None = None
+    port: str | None = None
 
 
 @dataclass
@@ -60,7 +56,7 @@ class Config:
     destinations: list[Destination] = field(default_factory=list)
     jumphost: str | None = None
     kill_defunct: bool = False
-    options: list[str] | None = None
+    options: list[str] = field(default_factory=list)
     rows: int = 0
     shell: str = ""
     sleep: float = 0
@@ -68,13 +64,13 @@ class Config:
 
 
 def error(message: str) -> NoReturn:
-    """Squeak and keel over"""
+    """Scream and die"""
     logger.error(message)
     sys.exit(1)
 
 
 def get_arg_parser() -> argparse.ArgumentParser:
-    """Parse it. Parse it real good."""
+    """Parse user args, as is tradition"""
     parser = argparse.ArgumentParser(
         description="Run multiple ssh connections concurrently in an iTerm2 terminal."
     )
@@ -112,7 +108,7 @@ def get_arg_parser() -> argparse.ArgumentParser:
         "-p",
         "--port",
         dest="port",
-        type=int,
+        type=str,
         help="ssh server port, overridden per-host by specifying 'host:port'",
     )
     parser.add_argument(
@@ -198,23 +194,15 @@ def get_destination_user(destination: str, arg_user: str | None) -> str | None:
     return user
 
 
-def get_destination_port(destination: str, arg_port: int | None) -> int | None:
+def get_destination_port(destination: str, arg_port: str | None) -> str | None:
     """Parse out a port from a user-specified destination spec"""
-    port: int | None = arg_port
+    port: str | None = arg_port
     if re.search(r"\[..*\]", destination):
-        port_str: str = destination.split("]")[1].lstrip(":")
-        if port_str:
-            try:
-                port = int(destination.split("]")[1].lstrip(":"))
-                logger.debug(f"Found port {port} in destination {destination}")
-            except ValueError:
-                error(f"Port specified in {destination} is not an integer.")
+        port = destination.split("]")[1].lstrip(":")
     elif ":" in destination:
-        try:
-            port = int(destination.split(":")[1])
-            logger.debug(f"Found port {port} in destination {destination}")
-        except ValueError:
-            error(f"Port specified in {destination} is not an integer.")
+        port = destination.split(":")[1]
+    if port:
+        logger.debug(f"Found port {port} in destination {destination}")
     return port
 
 
@@ -243,16 +231,13 @@ def get_user_shell() -> str:
     shell: str | None = os.environ.get("SHELL")
     if shell:
         logger.debug(f"Using shell {shell} from $SHELL")
-    else:
-        try:
-            pcomplete: CompletedProcess = subprocess.run(
-                "command -v bash", shell=True, check=True, capture_output=True
-            )
-        except subprocess.CalledProcessError:
-            error("Could not find a local shell to run. Set $SHELL or install bash.")
-        shell = pcomplete.stdout.decode().strip()
-        logger.debug(f"No $SHELL found, using {shell} from PATH")
-    return shell
+        return shell
+    logger.debug("No $SHELL found, looking for bash")
+    shell = shutil.which("bash")
+    if shell:
+        logger.debug(f"Using bash shell {shell}")
+        return shell
+    error("Could not find a local shell to run. Set $SHELL or install bash.")
 
 
 def set_columns(columns: int | None, rows: int | None, sessions: int) -> int:
@@ -325,7 +310,9 @@ def gen_spacer_profile(shell: str) -> iterm2.LocalWriteOnlyProfile:
 async def sessions_list(connection: Connection) -> None:
     """Print out sessions started by csshi"""
     logger.debug("Connecting to iTerm")
-    app = await iterm2.async_get_app(connection)
+    app: App = await iterm2.async_get_app(connection) or error(
+        "Could not connect to iTerm2"
+    )
     logger.debug("Connected")
     windows: dict[str, list[str]] = {}
     for window in app.windows:
@@ -356,8 +343,6 @@ async def monitor_sessions(app: App, con: Connection, tab: Tab, reap: bool) -> N
     """Wait for termination messages, and close any terminated sessions"""
     async with iterm2.SessionTerminationMonitor(con) as mon:
         while tab.sessions:
-            logger.debug(f"Active sessions: {tab.sessions}")
-            logger.debug("Waiting for next session to close...")
             try:
                 session_id = await asyncio.wait_for(mon.async_get(), timeout=2)
             except asyncio.TimeoutError:
@@ -367,7 +352,7 @@ async def monitor_sessions(app: App, con: Connection, tab: Tab, reap: bool) -> N
                     logger.debug("Iterm2 is not running - ending session monitor")
                     return
                 if not tab.window:
-                    logger.debug("Window gone - ending session montor")
+                    logger.debug("Window gone - ending session monitor")
                     return
                 continue
             logger.debug(f"Got termination for {session_id}")
@@ -397,35 +382,59 @@ def configure_ssh_profile(config: Config, profile: Profile, index: int) -> None:
     profile.set_name(f"{session_name_prefix}{config.destinations[index].host}")
 
 
+def launch_iterm() -> None:
+    """Launch iTerm2"""
+    logger.debug("Launching iTerm...")
+    workspace = NSWorkspace.sharedWorkspace()
+    url = workspace.URLForApplicationWithBundleIdentifier_("com.googlecode.iterm2")
+    if not url:
+        error("Could not find iTerm2 application URL. Is iTerm2 installed?")
+    nsconfig = NSWorkspaceOpenConfiguration.configuration()
+    workspace.openApplicationAtURL_configuration_completionHandler_(
+        url, nsconfig, launch_handler
+    )
+    deadline: float = monotonic() + 10
+    while not NSRunningApplication.runningApplicationsWithBundleIdentifier_(
+        "com.googlecode.iterm2"
+    ):
+        if monotonic() > deadline:
+            error("Timed out waiting for iTerm2 to launch.")
+        logger.debug("Waiting for iTerm2 to launch...")
+        sleep(1)
+    logger.debug("iTerm2 running")
+
+
 async def sessions_run(config: Config, connection: Connection) -> None:
     """Launch all sessions and spacers"""
     ssh_profile: Profile = gen_ssh_profile()
     spacer_profile: Profile = gen_spacer_profile(config.shell)
     logger.debug("Connecting to iTerm")
-    app = await iterm2.async_get_app(connection)
+    app: App = await iterm2.async_get_app(connection) or error(
+        "Could not connect to iTerm2"
+    )
     logger.debug("Connected")
     host_ind = 0
     # Launch the first pane straight into ssh
     logger.debug("Launching 1st pane")
     configure_ssh_profile(config, ssh_profile, host_ind)
-    window = await iterm2.Window.async_create(
+    window: Window = await iterm2.Window.async_create(
         connection, profile_customizations=ssh_profile
-    )
-    tab = window.current_tab
+    ) or error("Could not create new iTerm2 window")
+    tab: Tab = window.current_tab or error("Could not get current tab for window")
     # Launch the rest of the first row into ssh
     # First row will always be all ssh panes, no spacers
-    column_heads: list[Session] = [tab.current_session]
+    session: Session = tab.current_session or error("Could not get current session")
+    column_heads: list[Session] = [session]
     for _ in range(config.cols - 1):
         logger.debug(f"Sleeping for {config.sleep} seconds")
         await asyncio.sleep(config.sleep)
         host_ind += 1
         logger.debug("Splitting pane")
         configure_ssh_profile(config, ssh_profile, host_ind)
-        column_heads.append(
-            await tab.current_session.async_split_pane(
-                vertical=True, profile_customizations=ssh_profile
-            )
-        )
+        session = await session.async_split_pane(
+            vertical=True, profile_customizations=ssh_profile
+        ) or error("Could not split pane for ssh session")
+        column_heads.append(session)
     # Create the rest of the pane rows, either as ssh or spacer
     total_sessions = config.cols
     column_tails = column_heads.copy()  # new pane rows are split from the bottom
@@ -480,24 +489,7 @@ if __name__ == "__main__":
         parser.print_usage()
         error("The following arguments are required: destination")
     config: Config = build_config(args)
-    logger.debug("Launching iTerm...")
-    workspace = NSWorkspace.sharedWorkspace()
-    url = workspace.URLForApplicationWithBundleIdentifier_("com.googlecode.iterm2")
-    if not url:
-        error("Could not find iTerm2 application URL. Is iTerm2 installed?")
-    nsconfig = NSWorkspaceOpenConfiguration.configuration()
-    workspace.openApplicationAtURL_configuration_completionHandler_(
-        url, nsconfig, launch_handler
-    )
-    deadline: float = monotonic() + 10
-    while not NSRunningApplication.runningApplicationsWithBundleIdentifier_(
-        "com.googlecode.iterm2"
-    ):
-        if monotonic() > deadline:
-            error("Timed out waiting for iTerm2 to launch.")
-        logger.debug("Waiting for iTerm2 to launch...")
-        sleep(1)
-    logger.debug("iTerm2 running")
+    launch_iterm()
     sessions_run_partial = partial(sessions_run, config)
     logger.debug("Entering sessions_run()")
     iterm2.run_until_complete(sessions_run_partial)
