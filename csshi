@@ -21,11 +21,9 @@ from time import monotonic, sleep
 from typing import NoReturn
 
 import iterm2
-from AppKit import (  # type: ignore
-    NSRunningApplication,
-    NSWorkspace,
-    NSWorkspaceOpenConfiguration,
-)
+from AppKit import NSRunningApplication  # type: ignore
+from AppKit import NSWorkspace  # type: ignore
+from AppKit import NSWorkspaceOpenConfiguration  # type: ignore
 from iterm2 import LocalWriteOnlyProfile as Profile
 from iterm2 import Window
 from iterm2.app import App
@@ -139,24 +137,25 @@ def get_arg_parser() -> argparse.ArgumentParser:
         default="ssh",
         help="SSH binary to use. Defaults to 'ssh'",
     )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
+    grid_group = parser.add_mutually_exclusive_group()
+    grid_group.add_argument(
         "-C",
         "--columns",
         dest="columns",
         type=int,
         help="Maximum number of columns to use.",
     )
-    group.add_argument(
+    grid_group.add_argument(
         "-R", "--rows", dest="rows", type=int, help="Maximum number of rows to use."
     )
-    parser.add_argument(
+    runtype_group = parser.add_mutually_exclusive_group(required=True)
+    runtype_group.add_argument(
         "destinations",
         metavar="destination",
         nargs="*",
         help="[user@]host[:port] ssh connection specification. NB: Square brackets MUST be used around IPv6 IP adresses",
     )
-    parser.add_argument(
+    runtype_group.add_argument(
         "-L",
         "--list-sessions",
         dest="list_sessions",
@@ -473,24 +472,21 @@ async def sessions_run(config: Config, connection: Connection) -> None:
         await monitor_sessions(app, connection, tab, config.kill_defunct)
 
 
-if __name__ == "__main__":
-    parser = get_arg_parser()
-    args = parser.parse_args()
+def setup_logging(debug: bool) -> None:
+    """Set log level and format for debug/normal"""
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+
+if __name__ == "__main__":
+    args: argparse.Namespace = get_arg_parser().parse_args()
+    setup_logging(args.debug)
     if args.list_sessions:
-        logger.debug("Entering sessions_list()")
         iterm2.run_until_complete(sessions_list)
-        logger.debug("sessions_list() has completed. Exiting.")
-        sys.exit(0)
-    if not args.destinations:
-        parser.print_usage()
-        error("The following arguments are required: destination")
-    config: Config = build_config(args)
-    launch_iterm()
-    sessions_run_partial = partial(sessions_run, config)
-    logger.debug("Entering sessions_run()")
-    iterm2.run_until_complete(sessions_run_partial)
-    logger.debug("sessions_run() has completed. Exiting.")
+    else:
+        config: Config = build_config(args)
+        launch_iterm()
+        sessions_run_partial = partial(sessions_run, config)
+        iterm2.run_until_complete(sessions_run_partial)
