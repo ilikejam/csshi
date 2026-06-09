@@ -438,7 +438,7 @@ async def sessions_run(config: Config, connection: Connection) -> None:
         logger.debug("Splitting pane")
         configure_ssh_profile(config, ssh_profile, host_ind)
         session = await session.async_split_pane(
-            vertical=True, profile_customizations=ssh_profile
+            vertical=True, profile=config.profile, profile_customizations=ssh_profile
         ) or error("Could not split pane for ssh session")
         column_heads.append(session)
     # Create the rest of the pane rows, either as ssh or spacer
@@ -455,13 +455,17 @@ async def sessions_run(config: Config, connection: Connection) -> None:
                 logger.debug("Splitting pane")
                 configure_ssh_profile(config, ssh_profile, host_ind)
                 last = await column_tails[j].async_split_pane(
-                    vertical=False, profile_customizations=ssh_profile
+                    vertical=False,
+                    profile=config.profile,
+                    profile_customizations=ssh_profile,
                 )
             elif not config.kill_defunct:
                 # If '-k' flag is _not_ specified, launch spacer panes to fill last row
                 logger.debug("Splitting pane for spacer")
                 last = await column_tails[j].async_split_pane(
-                    vertical=False, profile_customizations=spacer_profile
+                    vertical=False,
+                    profile=config.profile,
+                    profile_customizations=spacer_profile,
                 )
             else:
                 continue
