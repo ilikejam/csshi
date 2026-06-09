@@ -33,6 +33,7 @@ from iterm2.session import Session
 from iterm2.tab import Tab
 
 logger: logging.Logger = logging.getLogger(__name__)
+bundle_id = "com.googlecode.iterm2"
 # We prepend U+2064 INVISIBLE PLUS to session names so we know they're from csshi
 session_name_prefix = "\u2064"
 
@@ -74,6 +75,13 @@ def setup_logging(debug: bool) -> None:
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+
+def iterm_running() -> bool:
+    """Check if iTerm2 is running"""
+    return bool(
+        NSRunningApplication.runningApplicationsWithBundleIdentifier_(bundle_id)
+    )
 
 
 def get_arg_parser() -> argparse.ArgumentParser:
@@ -361,7 +369,7 @@ def launch_iterm() -> None:
     """Launch iTerm2"""
     logger.debug("Launching iTerm...")
     workspace = NSWorkspace.sharedWorkspace()
-    url = workspace.URLForApplicationWithBundleIdentifier_("com.googlecode.iterm2")
+    url = workspace.URLForApplicationWithBundleIdentifier_(bundle_id)
     if not url:
         error("Could not find iTerm2 application URL. Is iTerm2 installed?")
     nsconfig = NSWorkspaceOpenConfiguration.configuration()
@@ -369,9 +377,7 @@ def launch_iterm() -> None:
         url, nsconfig, launch_handler
     )
     deadline: float = monotonic() + 10
-    while not NSRunningApplication.runningApplicationsWithBundleIdentifier_(
-        "com.googlecode.iterm2"
-    ):
+    while not iterm_running():
         if monotonic() > deadline:
             error("Timed out waiting for iTerm2 to launch.")
         logger.debug("Waiting for iTerm2 to launch...")
@@ -386,9 +392,7 @@ async def monitor_sessions(app: App, con: Connection, tab: Tab, reap: bool) -> N
             try:
                 session_id = await asyncio.wait_for(mon.async_get(), timeout=2)
             except asyncio.TimeoutError:
-                if not NSRunningApplication.runningApplicationsWithBundleIdentifier_(
-                    "com.googlecode.iterm2"
-                ):
+                if not iterm_running():
                     logger.debug("Iterm2 is not running - ending session monitor")
                     return
                 if not tab.window:
