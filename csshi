@@ -474,7 +474,7 @@ async def sessions_run(config: Config, connection: Connection) -> None:
 
 def setup_logging(debug: bool) -> None:
     """Set log level and format for debug/normal"""
-    if args.debug:
+    if debug:
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
