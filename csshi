@@ -24,8 +24,8 @@ import iterm2
 from AppKit import NSRunningApplication  # type: ignore
 from AppKit import NSWorkspace  # type: ignore
 from AppKit import NSWorkspaceOpenConfiguration  # type: ignore
-from iterm2 import LocalWriteOnlyProfile as Profile
-from iterm2 import Window
+from iterm2 import LocalWriteOnlyProfile as LocalProfile
+from iterm2 import Profile, Window
 from iterm2.app import App
 from iterm2.connection import Connection
 from iterm2.profile import TitleComponents
@@ -55,6 +55,7 @@ class Config:
     jumphost: str | None = None
     kill_defunct: bool = False
     options: list[str] = field(default_factory=list)
+    profile: str | None = None
     rows: int = 0
     shell: str = ""
     sleep: float = 0
@@ -144,6 +145,12 @@ def get_arg_parser() -> argparse.ArgumentParser:
         dest="binary",
         default="ssh",
         help="SSH binary to use. Defaults to 'ssh'",
+    )
+    parser.add_argument(
+        "-P",
+        "--profile",
+        dest="profile",
+        help="iTerm2 settings Profile to use for csshi window. Defaults to your default Profile.",
     )
     grid_group = parser.add_mutually_exclusive_group()
     grid_group.add_argument(
@@ -275,11 +282,12 @@ def build_config(args: argparse.Namespace) -> Config:
     config.binary = args.binary
     config.broadcast = not args.nobroadcast
     config.caffeine = args.caffeine
+    config.cols = set_columns(args.columns, args.rows, num_destinations)
     config.debug = args.debug
     config.jumphost = args.jumphost
-    config.options = args.options
     config.kill_defunct = args.kill
-    config.cols = set_columns(args.columns, args.rows, num_destinations)
+    config.options = args.options
+    config.profile = args.profile
     config.rows = ceil(num_destinations / config.cols)
     config.shell = get_user_shell()
     config.sleep = args.sleep
@@ -295,7 +303,7 @@ def build_config(args: argparse.Namespace) -> Config:
     return config
 
 
-def gen_ssh_profile() -> iterm2.LocalWriteOnlyProfile:
+def gen_ssh_profile() -> LocalProfile:
     """iTerm base profile for ssh panes"""
     profile = iterm2.LocalWriteOnlyProfile()
     profile.set_title_components([TitleComponents.SESSION_NAME])
@@ -305,7 +313,7 @@ def gen_ssh_profile() -> iterm2.LocalWriteOnlyProfile:
     return profile
 
 
-def gen_spacer_profile(shell: str) -> iterm2.LocalWriteOnlyProfile:
+def gen_spacer_profile(shell: str) -> LocalProfile:
     """iTerm profile for spacer panes - Just spit out a message a wait"""
     profile = iterm2.LocalWriteOnlyProfile()
     profile.set_use_custom_command("Yes")
@@ -314,7 +322,7 @@ def gen_spacer_profile(shell: str) -> iterm2.LocalWriteOnlyProfile:
     return profile
 
 
-def configure_ssh_profile(config: Config, profile: Profile, index: int) -> None:
+def configure_ssh_profile(config: Config, profile: LocalProfile, index: int) -> None:
     """Set up a Profile for ssh"""
     ssh_string: str = build_ssh_string(config, index)
     logger.debug(f"{config.destinations[index].host} ssh_exec_string: {ssh_string}")
@@ -331,6 +339,16 @@ async def set_broadcast(app: App, connection: Connection, tab: Tab) -> None:
     bc_domains.append(domain)
     logger.debug("Enabling input broadcast")
     await iterm2.async_set_broadcast_domains(connection, bc_domains)
+
+
+async def check_profile(connection: Connection, profile_name: str) -> None:
+    """Check that a specified iTerm2 profile exists"""
+    for profile in await Profile.async_get(connection):
+        logger.debug(f"Found iTerm2 profile {profile.name}")
+        if profile.name == profile_name:
+            logger.debug(f"Matched iTerm2 profile {profile.name}")
+            return
+    error(f"Could not find iTerm2 profile {profile_name}")
 
 
 def launch_handler(_, launch_error) -> None:
@@ -392,8 +410,8 @@ async def monitor_sessions(app: App, con: Connection, tab: Tab, reap: bool) -> N
 
 async def sessions_run(config: Config, connection: Connection) -> None:
     """Launch all sessions and spacers"""
-    ssh_profile: Profile = gen_ssh_profile()
-    spacer_profile: Profile = gen_spacer_profile(config.shell)
+    ssh_profile: LocalProfile = gen_ssh_profile()
+    spacer_profile: LocalProfile = gen_spacer_profile(config.shell)
     logger.debug("Connecting to iTerm")
     app: App = await iterm2.async_get_app(connection) or error(
         "Could not connect to iTerm2"
@@ -403,8 +421,10 @@ async def sessions_run(config: Config, connection: Connection) -> None:
     # Launch the first pane straight into ssh
     logger.debug("Launching 1st pane")
     configure_ssh_profile(config, ssh_profile, host_ind)
+    if config.profile:
+        await check_profile(connection, config.profile)
     window: Window = await iterm2.Window.async_create(
-        connection, profile_customizations=ssh_profile
+        connection, profile=config.profile, profile_customizations=ssh_profile
     ) or error("Could not create new iTerm2 window")
     tab: Tab = window.current_tab or error("Could not get current tab for window")
     # Launch the rest of the first row into ssh

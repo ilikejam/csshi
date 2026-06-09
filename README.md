@@ -31,8 +31,9 @@ The 'Require "Automation" permission' option is OK.
 # Usage  
 ```text
 usage: csshi [-h] [-d] [-k] [-c] [-n] [-l USERNAME] [-p PORT] [-J JUMPHOST]
-             [-s SLEEP] [-o OPTIONS] [-b BINARY] [-C COLUMNS | -R ROWS] [-L]
-             [destination ...]
+             [-s SLEEP] [-o OPTIONS] [-b BINARY] [-P PROFILE] [-C COLUMNS |
+             -R ROWS]
+             (-L | destination ...)
 
 Run multiple ssh connections concurrently in an iTerm2 terminal.
 
@@ -58,6 +59,9 @@ options:
                         Raw ssh options string, e.g. '-i ~/.ssh/id_ansible'.
                         Can be specified multiple times.
   -b, --binary BINARY   SSH binary to use. Defaults to 'ssh'
+  -P, --profile PROFILE
+                        iTerm2 settings Profile to use for csshi window.
+                        Defaults to your default Profile.
   -C, --columns COLUMNS
                         Maximum number of columns to use.
   -R, --rows ROWS       Maximum number of rows to use.
@@ -80,6 +84,7 @@ You can still access the menu for each pane with Ctrl-click instead of the menub
 `iTerm2` -> `Settings...` -> `Profiles` -> `Text` -> `Anti-aliased`
 * Decrease the 'Side' and 'Top & bottom' margins:  
 `iTerm2` -> `Settings...` -> `Appearance` -> `Panes`
+* Add an iTerm2 Profile (`iTerm2` -> `Settings...` -> `Profiles`) with optimised font size etc, and run csshi with  `-P <profile name>` to use it.
 
 If you are connecting to large numbers of hosts via a single Jumphost, it's advisable to set up multiplexing for the Jumphost:  
 https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing  
