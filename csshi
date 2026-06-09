@@ -67,6 +67,14 @@ def error(message: str) -> NoReturn:
     sys.exit(1)
 
 
+def setup_logging(debug: bool) -> None:
+    """Set log level and format for debug/normal"""
+    if debug:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+
 def get_arg_parser() -> argparse.ArgumentParser:
     """Parse user args, as is tradition"""
     parser = argparse.ArgumentParser(
@@ -306,25 +314,12 @@ def gen_spacer_profile(shell: str) -> iterm2.LocalWriteOnlyProfile:
     return profile
 
 
-async def sessions_list(connection: Connection) -> None:
-    """Print out sessions started by csshi"""
-    logger.debug("Connecting to iTerm")
-    app: App = await iterm2.async_get_app(connection) or error(
-        "Could not connect to iTerm2"
-    )
-    logger.debug("Connected")
-    windows: dict[str, list[str]] = {}
-    for window in app.windows:
-        windows[window.window_id] = []
-        for tab in window.tabs:
-            for session in tab.sessions:
-                if session.name.startswith(session_name_prefix):
-                    windows[window.window_id].append(
-                        session.name[len(session_name_prefix) :]
-                    )
-    for session_list in windows.values():
-        if session_list:
-            print(" ".join(session_list))
+def configure_ssh_profile(config: Config, profile: Profile, index: int) -> None:
+    """Set up a Profile for ssh"""
+    ssh_string: str = build_ssh_string(config, index)
+    logger.debug(f"{config.destinations[index].host} ssh_exec_string: {ssh_string}")
+    profile.set_command(config.ssh_exec_string.format(ssh_string=ssh_string))
+    profile.set_name(f"{session_name_prefix}{config.destinations[index].host}")
 
 
 async def set_broadcast(app: App, connection: Connection, tab: Tab) -> None:
@@ -336,6 +331,34 @@ async def set_broadcast(app: App, connection: Connection, tab: Tab) -> None:
     bc_domains.append(domain)
     logger.debug("Enabling input broadcast")
     await iterm2.async_set_broadcast_domains(connection, bc_domains)
+
+
+def launch_handler(_, launch_error) -> None:
+    """Handle iTerm2 launch callback"""
+    if launch_error:
+        error("Could not launch iTerm2.")
+
+
+def launch_iterm() -> None:
+    """Launch iTerm2"""
+    logger.debug("Launching iTerm...")
+    workspace = NSWorkspace.sharedWorkspace()
+    url = workspace.URLForApplicationWithBundleIdentifier_("com.googlecode.iterm2")
+    if not url:
+        error("Could not find iTerm2 application URL. Is iTerm2 installed?")
+    nsconfig = NSWorkspaceOpenConfiguration.configuration()
+    workspace.openApplicationAtURL_configuration_completionHandler_(
+        url, nsconfig, launch_handler
+    )
+    deadline: float = monotonic() + 10
+    while not NSRunningApplication.runningApplicationsWithBundleIdentifier_(
+        "com.googlecode.iterm2"
+    ):
+        if monotonic() > deadline:
+            error("Timed out waiting for iTerm2 to launch.")
+        logger.debug("Waiting for iTerm2 to launch...")
+        sleep(1)
+    logger.debug("iTerm2 running")
 
 
 async def monitor_sessions(app: App, con: Connection, tab: Tab, reap: bool) -> None:
@@ -365,42 +388,6 @@ async def monitor_sessions(app: App, con: Connection, tab: Tab, reap: bool) -> N
                         logger.debug(f"Ignoring session {session_id} - not in our tab")
                 else:
                     logger.debug(f"Session for {session_id} gone")
-
-
-def launch_handler(_, launch_error) -> None:
-    """Handle iTerm2 launch callback"""
-    if launch_error:
-        error("Could not launch iTerm2.")
-
-
-def configure_ssh_profile(config: Config, profile: Profile, index: int) -> None:
-    """Set up a Profile for ssh"""
-    ssh_string: str = build_ssh_string(config, index)
-    logger.debug(f"{config.destinations[index].host} ssh_exec_string: {ssh_string}")
-    profile.set_command(config.ssh_exec_string.format(ssh_string=ssh_string))
-    profile.set_name(f"{session_name_prefix}{config.destinations[index].host}")
-
-
-def launch_iterm() -> None:
-    """Launch iTerm2"""
-    logger.debug("Launching iTerm...")
-    workspace = NSWorkspace.sharedWorkspace()
-    url = workspace.URLForApplicationWithBundleIdentifier_("com.googlecode.iterm2")
-    if not url:
-        error("Could not find iTerm2 application URL. Is iTerm2 installed?")
-    nsconfig = NSWorkspaceOpenConfiguration.configuration()
-    workspace.openApplicationAtURL_configuration_completionHandler_(
-        url, nsconfig, launch_handler
-    )
-    deadline: float = monotonic() + 10
-    while not NSRunningApplication.runningApplicationsWithBundleIdentifier_(
-        "com.googlecode.iterm2"
-    ):
-        if monotonic() > deadline:
-            error("Timed out waiting for iTerm2 to launch.")
-        logger.debug("Waiting for iTerm2 to launch...")
-        sleep(1)
-    logger.debug("iTerm2 running")
 
 
 async def sessions_run(config: Config, connection: Connection) -> None:
@@ -472,12 +459,25 @@ async def sessions_run(config: Config, connection: Connection) -> None:
         await monitor_sessions(app, connection, tab, config.kill_defunct)
 
 
-def setup_logging(debug: bool) -> None:
-    """Set log level and format for debug/normal"""
-    if debug:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+async def sessions_list(connection: Connection) -> None:
+    """Print out sessions started by csshi"""
+    logger.debug("Connecting to iTerm")
+    app: App = await iterm2.async_get_app(connection) or error(
+        "Could not connect to iTerm2"
+    )
+    logger.debug("Connected")
+    windows: dict[str, list[str]] = {}
+    for window in app.windows:
+        windows[window.window_id] = []
+        for tab in window.tabs:
+            for session in tab.sessions:
+                if session.name.startswith(session_name_prefix):
+                    windows[window.window_id].append(
+                        session.name[len(session_name_prefix) :]
+                    )
+    for session_list in windows.values():
+        if session_list:
+            print(" ".join(session_list))
 
 
 if __name__ == "__main__":
