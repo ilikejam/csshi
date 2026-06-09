@@ -488,5 +488,4 @@ if __name__ == "__main__":
     else:
         config: Config = build_config(args)
         launch_iterm()
-        sessions_run_partial = partial(sessions_run, config)
-        iterm2.run_until_complete(sessions_run_partial)
+        iterm2.run_until_complete(partial(sessions_run, config))
