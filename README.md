@@ -70,7 +70,8 @@ options:
 ```
 
 # Bugs
-If running csshi from a different terminal emulator (e.g. Terminal) and `-k` or `-d` have been supplied; `csshi` will dump a stack trace if iTerm2 quits from under us. We still terminate normally, so only a cosmetic issue.
+* If running csshi from a different terminal emulator (e.g. Terminal) and `-k` or `-d` have been supplied; `csshi` will dump a stack trace if iTerm2 quits from under us. We still terminate normally, so only a cosmetic issue.
+* When running with `-k`, sessions which exit (e.g. if the hostname is not found) before all of the sessions open may not be closed automatically.
 
 # Tips
 If you have a file listing hostnames to connect to, use `xargs`:  
