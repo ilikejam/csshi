@@ -1,5 +1,5 @@
 # csshi
-A ClusterSSH utility (like [cssh](https://github.com/duncs/clusterssh)) for [iTerm2](https://iterm2.com/). Pronounced 'cushy'.
+A ClusterSSH utility (like [cssh](https://github.com/duncs/clusterssh)) for [iTerm2](https://iterm2.com/).
 
 The command opens an iTerm2 Window and connects over ssh to each specified host in a [split pane](https://iterm2.com/features.html) session, with any text typed or pasted replicated to all panes through iTerm2's 'broadcast' feature by default. iTerm2's split pane controls are available as normal, so broadcast input can be toggled per-pane, sessions can be restarted, etc.
 
@@ -80,8 +80,6 @@ Some preferences to optimise for shell density if you find yourself opening a lo
 * Disable pane menubars:  
 `iTerm2` -> `Settings...` -> `Appearance` -> `Panes` -> `Show per-pane title bar with split panes`  
 You can still access the menu for each pane with Ctrl-click instead of the menubar burger icon
-* Use a small font, like the original [misc-fixed 6x13](https://monkey.org/~marius/beautiful-fixed-width-fonts-for-osx.html), and disable antialiasing:  
-`iTerm2` -> `Settings...` -> `Profiles` -> `Text` -> `Anti-aliased`
 * Decrease the 'Side' and 'Top & bottom' margins:  
 `iTerm2` -> `Settings...` -> `Appearance` -> `Panes`
 * Add an iTerm2 Profile (`iTerm2` -> `Settings...` -> `Profiles`) with optimised font size etc, and run csshi with  `-P <profile name>` to use it.
