@@ -1,5 +1,6 @@
 [project]
 name = "csshi"
+version = 'v1.20'
 dependencies = [
   "iterm2==2.20",
   "protobuf==7.35.0",
@@ -7,4 +8,9 @@ dependencies = [
   "pyobjc-core==12.2",
   "pyobjc-framework-Cocoa==12.2",
 ]
-version = 'v1.20'
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
