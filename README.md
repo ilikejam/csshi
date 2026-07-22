@@ -1,13 +1,13 @@
 # csshi
 A ClusterSSH utility (like [cssh](https://github.com/duncs/clusterssh)) for [iTerm2](https://iterm2.com/).
 
-The command opens an iTerm2 Window and connects over ssh to each specified host in a [split pane](https://iterm2.com/features.html) session, with any text typed or pasted replicated to all panes through iTerm2's 'broadcast' feature by default. iTerm2's split pane controls are available as normal, so broadcast input can be toggled per-pane, sessions can be restarted, etc.
+Opens an iTerm2 Window and connects over ssh to each host specified in the command arguments in a [split pane](https://iterm2.com/features.html) session, with any input typed or pasted in any pane replicated to all panes through iTerm2's 'broadcast' feature.
 
 ![Screenshot](screenshot.png "Screenshot")
 
 # Install
 
-Installing first time round will take a while - pyobjc is a required package and it compiles a lot of stuff as it installs. Later installs and upgrades will be much faster as the packages will be cached.
+Installing first time round will take a while - pyobjc is a required package and it compiles a lot of things as it installs. Later installs and upgrades will be much faster as the packages will be cached.
 
 ## Homebrew
 * Install iTerm2 however you like.
@@ -15,7 +15,7 @@ Installing first time round will take a while - pyobjc is a required package and
 ```$ brew install ilikejam/csshi/csshi```
 * Enable the iTerm2 Python API at:  
 `iTerm2` -> `Settings...` -> `General` -> `Magic`  
-The 'Require "Automation" permission' option is OK.
+Select 'Enable Python API' and then 'Require "Automation" permission'.
 
 ## Manual
 * Install iTerm2 however you like.
@@ -26,7 +26,7 @@ The 'Require "Automation" permission' option is OK.
 ```$ pip3 install -r requirements.txt```
 * Enable the iTerm2 Python API at:  
 `iTerm2` -> `Settings...` -> `General` -> `Magic`  
-The 'Require "Automation" permission' option is OK.
+Select 'Enable Python API' and then 'Require "Automation" permission'.
 
 # Usage  
 ```text
