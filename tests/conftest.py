@@ -6,7 +6,7 @@ so that tests can run on any platform.
 import importlib.util
 import pathlib
 import sys
-from importlib.machinery import SourceFileLoader
+from importlib.machinery import ModuleSpec, SourceFileLoader
 from unittest.mock import MagicMock
 
 # Stub out iterm2 and all sub-modules before anything imports them
@@ -26,8 +26,8 @@ sys.modules.setdefault("AppKit", MagicMock())
 # Load csshi (no .py extension) as a regular module
 _csshi_path = str(pathlib.Path(__file__).parent.parent / "csshi")
 _loader = SourceFileLoader("csshi", _csshi_path)
-_spec = importlib.util.spec_from_file_location("csshi", _csshi_path, loader=_loader)
-assert _spec is not None
+_spec = ModuleSpec("csshi", _loader, origin=_csshi_path)
+_spec.has_location = True
 _csshi = importlib.util.module_from_spec(_spec)
 _loader.exec_module(_csshi)
 sys.modules["csshi"] = _csshi

@@ -21,9 +21,11 @@ from time import monotonic, sleep
 from typing import NoReturn
 
 import iterm2
-from AppKit import NSRunningApplication  # type: ignore
-from AppKit import NSWorkspace  # type: ignore
-from AppKit import NSWorkspaceOpenConfiguration  # type: ignore
+from AppKit import (
+    NSRunningApplication,  # type: ignore
+    NSWorkspace,  # type: ignore
+    NSWorkspaceOpenConfiguration,  # type: ignore
+)
 from iterm2 import LocalWriteOnlyProfile as LocalProfile
 from iterm2 import Profile, Window
 from iterm2.app import App
@@ -241,8 +243,7 @@ def build_ssh_string(config: Config, index: int) -> str:
     if config.jumphost:
         ssh_args.extend(["-J", config.jumphost])
     if config.options:
-        for option in config.options:
-            ssh_args.append(option)
+        ssh_args.extend(config.options)
     ssh_args.append(config.destinations[index].host)
     ssh_string: str = " ".join(ssh_args)
     return ssh_string
@@ -391,7 +392,7 @@ async def monitor_sessions(app: App, con: Connection, tab: Tab, reap: bool) -> N
         while tab.sessions:
             try:
                 session_id = await asyncio.wait_for(mon.async_get(), timeout=2)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 if not iterm_running():
                     logger.debug("Iterm2 is not running - ending session monitor")
                     return
