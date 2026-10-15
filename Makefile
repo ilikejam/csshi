@@ -15,7 +15,5 @@ test:
 
 lint:
 	black --check csshi tests/
-	isort --check --profile=black csshi
-	cd tests && isort --check --profile=black *.py
 	ruff check csshi tests/
 	mypy csshi tests/
